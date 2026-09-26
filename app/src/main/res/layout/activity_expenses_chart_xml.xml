@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center_horizontal"
+    android:background="#FFFFFF">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Podsumowanie Wydatków XML"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="32dp"
+        android:textColor="#000000"/>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="320dp">
+
+        <!-- Warstwa 1 (Tło): Siatka osi Y generowana sztywno "w XMLu" -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginBottom="40dp"
+            android:orientation="vertical">
+
+            <include layout="@layout/item_grid_line" android:id="@+id/gridLine4" />
+            <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+            <include layout="@layout/item_grid_line" android:id="@+id/gridLine3" />
+            <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+            <include layout="@layout/item_grid_line" android:id="@+id/gridLine2" />
+            <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+            <include layout="@layout/item_grid_line" android:id="@+id/gridLine1" />
+            <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+            <include layout="@layout/item_grid_line" android:id="@+id/gridLine0" />
+        </LinearLayout>
+
+        <!-- Warstwa 2 (Wierzch): Pusty kontener na słupki, które wstrzykniemy z poziomu kodu -->
+        <LinearLayout
+            android:id="@+id/barsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginLeft="40dp"
+            android:orientation="horizontal">
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

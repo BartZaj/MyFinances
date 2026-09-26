@@ -39,7 +39,7 @@ class LogInCompose : ComponentActivity() {
                 ) {
                     LoginScreen(
                         onLoginSuccess = {
-                            val intent = Intent(this, MainActivity::class.java)
+                            val intent = Intent(this, ExpensesChartActivity::class.java)
                             startActivity(intent)
                             finish()
                         },

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-
     <!-- Uprawnienia niezbędne do działania Firebase i sprawdzania połączenia z siecią -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -16,30 +15,33 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyFinances"
         tools:targetApi="31">
-
         <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
         <activity
-            android:name=".LogInActivity"
+            android:name=".LogInCompose"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+            android:theme="@style/Theme.MyFinances">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-
-        <!-- Aktywność Jetpack Compose zachowuje domyślny motyw projektu -->
+        </activity> <!-- Aktywność Jetpack Compose zachowuje domyślny motyw projektu -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.MyFinances" />
-
-        <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
+            android:theme="@style/Theme.MyFinances" /> <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
         <activity
-            android:name=".SignUpActivity"
+            android:name=".SignUpCompose"
             android:exported="true"
-            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
+            android:theme="@style/Theme.MyFinances" />
+        <activity
+            android:name=".ExpensesChartActivity"
+            android:exported="false"
+            android:label="@string/title_activity_expenses_chart"
+            android:theme="@style/Theme.MyFinances">
+            <!-- Przenieś tu intent-filter jeśli chcesz żeby to był ekran startowy -->
+        </activity>
     </application>
 
 </manifest>
