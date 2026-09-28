@@ -41,5 +41,6 @@ val mockExpenses = listOf(
     Expense("Lidl", 90.00f, LocalDate.of(2026, 9, 23), ExpenseCategory.FOOD),
     Expense("Prąd", 140.00f, LocalDate.of(2026, 9, 24), ExpenseCategory.BILLS),
     Expense("Bilet miesięczny", 110.00f, LocalDate.of(2026, 9, 25), ExpenseCategory.TRANSPORT),
-    Expense("Wyjście na miasto", 120.00f, LocalDate.of(2026, 9, 25), ExpenseCategory.ENTERTAINMENT)
+    Expense("Wyjście na miasto", 120.00f, LocalDate.of(2026, 9, 25), ExpenseCategory.ENTERTAINMENT),
+    Expense("Restauracja - pizza", 40.50f, LocalDate.of(2026, 9, 28), ExpenseCategory.FOOD),
 )

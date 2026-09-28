@@ -17,10 +17,10 @@
         tools:targetApi="31">
         <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
         <activity
-            android:name=".LogInCompose"
+            android:name=".LogInActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MyFinances">
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -32,14 +32,13 @@
             android:exported="true"
             android:theme="@style/Theme.MyFinances" /> <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
         <activity
-            android:name=".SignUpCompose"
+            android:name=".SignUpActivity"
             android:exported="true"
-            android:theme="@style/Theme.MyFinances" />
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
         <activity
-            android:name=".ExpensesChartActivity"
-            android:exported="false"
-            android:label="@string/title_activity_expenses_chart"
-            android:theme="@style/Theme.MyFinances">
+            android:name=".ExpensesChartXmlActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
             <!-- Przenieś tu intent-filter jeśli chcesz żeby to był ekran startowy -->
         </activity>
     </application>
