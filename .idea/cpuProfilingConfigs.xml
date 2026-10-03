@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CpuProfilerConfigsState">
+    <option name="userConfigs">
+      <list>
+        <CpuProfilerConfig>
+          <option name="bufferSizeMb" value="4" />
+          <option name="name" value="My" />
+          <option name="technology" value="SYSTEM_TRACE" />
+        </CpuProfilerConfig>
+      </list>
+    </option>
+  </component>
+</project>

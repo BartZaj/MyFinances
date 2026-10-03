@@ -47,6 +47,10 @@ import androidx.compose.ui.unit.dp
 import com.example.myfinances.ui.theme.MyFinancesTheme
 import android.util.Log
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -254,21 +258,20 @@ fun BarChartItem(
     xAxisLabelSpace: Dp,
     modifier: Modifier = Modifier
 ) {
-    // 1. Zmienna stanu - czy animacja ma ruszyć
     var startAnimation by remember { mutableStateOf(false) }
 
-    // 2. Deklaracja płynnej animacji wartości Float (od 0 do docelowego % wysokości)
-    val animatedHeight by animateFloatAsState(
+    // Animujemy bezpośrednio do docelowego procentu wysokości.
+    // Dzięki temu wykres płynnie zareaguje na zmianę danych w bazie (np. edycję wydatku)
+    val animatedFraction by animateFloatAsState(
         targetValue = if (startAnimation) heightPercentage else 0f,
         animationSpec = tween(
-            durationMillis = 1200, // Czas trwania: 1.2 sekundy
-            delayMillis = 100,     // Krótkie opóźnienie po starcie
-            easing = FastOutSlowInEasing // Zwalnia pod koniec (efekt naturalny)
+            durationMillis = 1200,
+            delayMillis = 100,
+            easing = FastOutSlowInEasing
         ),
-        label = "BarGrowthAnimation"
+        label = "BarHeightAnimation"
     )
 
-    // 3. Uruchomienie animacji od razu po wyrysowaniu elementu (wejściu do kompozycji)
     LaunchedEffect(Unit) {
         startAnimation = true
     }
@@ -278,36 +281,64 @@ fun BarChartItem(
         verticalArrangement = Arrangement.Bottom,
         modifier = modifier.fillMaxHeight()
     ) {
+        // Główny kontener wykresu (stały rozmiar)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom,
-                modifier = Modifier.fillMaxHeight()
+            // 1. Słupek rysowany w fazie Draw
+            Spacer(
+                modifier = Modifier
+                    .width(44.dp)
+                    .fillMaxHeight()
+                    .drawBehind {
+                        val barHeightPx = size.height * animatedFraction.coerceAtLeast(0.01f)
+                        val topY = size.height - barHeightPx
+                        val cornerPx = 6.dp.toPx()
+
+                        drawRoundRect(
+                            color = category.color,
+                            topLeft = Offset(0f, topY),
+                            size = Size(size.width, barHeightPx),
+                            cornerRadius = CornerRadius(cornerPx, cornerPx)
+                        )
+
+                        if (barHeightPx > cornerPx) {
+                            drawRect(
+                                color = category.color,
+                                topLeft = Offset(0f, topY + barHeightPx - cornerPx),
+                                size = Size(size.width, cornerPx)
+                            )
+                        }
+                    }
+            )
+
+            // 2. Tekst nad słupkiem
+            // Wrapper przejmuje 100% wysokości, by poprawnie wyliczyć przesunięcie
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        // Tutaj size.height oznacza pełną wysokość obszaru wykresu
+                        val barHeightPx = size.height * animatedFraction.coerceAtLeast(0.01f)
+
+                        // Przesuwamy tekst w górę o wysokość słupka + 4.dp marginesu nad nim
+                        translationY = -barHeightPx - 4.dp.toPx()
+                    },
+                contentAlignment = Alignment.BottomCenter
             ) {
                 if (total > 0) {
                     Text(
                         text = "${total.toInt()} zł",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
-
-                Box(
-                    modifier = Modifier
-                        .width(44.dp)
-                        // TUTAJ ZMIANA: Zamiast sztywnego heightPercentage używamy animatedHeight
-                        .fillMaxHeight(animatedHeight.coerceAtLeast(0.01f))
-                        .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                        .background(category.color)
-                )
             }
         }
 
+        // 3. Etykieta pod osią X
         Box(
             modifier = Modifier
                 .height(xAxisLabelSpace)
