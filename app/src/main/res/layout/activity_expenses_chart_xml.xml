@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FFFFFF">
 
-    <!-- Ekran ładowania (domyślnie widoczny na środku ekranu) -->
+    <!-- Ekran ładowania -->
     <ProgressBar
         android:id="@+id/progressBar"
         android:layout_width="wrap_content"
@@ -12,7 +13,7 @@
         android:layout_gravity="center"
         android:indeterminateTint="#74C69D" />
 
-    <!-- Główny widok wykresu (domyślnie ukryty: visibility="gone") -->
+    <!-- Główny widok wykresu -->
     <LinearLayout
         android:id="@+id/contentLayout"
         android:layout_width="match_parent"
@@ -36,7 +37,8 @@
             android:layout_width="match_parent"
             android:layout_height="320dp">
 
-            <!-- Warstwa 1 (Tło): Siatka osi Y -->
+            <!-- Siatka osi Y i Kontenery -->
+            <!-- Tutaj zostaje dokładnie to samo, co u Ciebie! -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -54,7 +56,6 @@
                 <include layout="@layout/item_grid_line" android:id="@+id/gridLine0" />
             </LinearLayout>
 
-            <!-- Warstwa 2 (Wierzch): Kontener na słupki -->
             <LinearLayout
                 android:id="@+id/barsContainer"
                 android:layout_width="match_parent"
@@ -64,4 +65,16 @@
             </LinearLayout>
         </FrameLayout>
     </LinearLayout>
+
+    <!-- Przycisk DODAJ (w prawym dolnym rogu) -->
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+        android:id="@+id/fabAddExpense"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:text="Dodaj wydatek"
+        app:icon="@android:drawable/ic_input_add"
+        app:backgroundTint="#D1E8E2" />
+
 </FrameLayout>

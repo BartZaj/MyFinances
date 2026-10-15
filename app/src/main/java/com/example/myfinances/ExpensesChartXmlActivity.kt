@@ -1,59 +1,73 @@
 package com.example.myfinances
 
 import android.animation.ValueAnimator
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.animation.DecelerateInterpolator
+import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.AutoCompleteTextView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.toArgb
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
+import java.util.Calendar
 
 class ExpensesChartXmlActivity : AppCompatActivity() {
 
-    // Referencje do głównych elementów UI
     private lateinit var progressBar: ProgressBar
     private lateinit var contentLayout: LinearLayout
     private lateinit var barsContainer: LinearLayout
+    private lateinit var fabAddExpense: ExtendedFloatingActionButton
+
+    private var databaseRef: DatabaseReference? = null
+    private var valueEventListener: ValueEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_expenses_chart_xml)
 
-        // Bindowanie widoków
         progressBar = findViewById(R.id.progressBar)
         contentLayout = findViewById(R.id.contentLayout)
         barsContainer = findViewById(R.id.barsContainer)
+        fabAddExpense = findViewById(R.id.fabAddExpense)
 
-        // Pobranie UID z Firebase Auth
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid == null) {
             Toast.makeText(this, "Brak zalogowanego użytkownika!", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
+        databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
 
-        // Rozpoczęcie pobierania danych (w tym momencie ProgressBar kręci się na ekranie)
-        databaseRef.addListenerForSingleValueEvent(object : ValueEventListener {
+        // 1. Zmiana na addValueEventListener (nasłuchiwanie na żywo)
+        valueEventListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!snapshot.exists() || !snapshot.hasChildren()) {
-                    // BAZA PUSTA: Zapisujemy mockExpenses do Firebase
                     mockExpenses.forEach { expense ->
-                        val newExpenseRef = databaseRef.push()
+                        val newExpenseRef = databaseRef!!.push()
                         val expenseData = mapOf(
                             "name" to expense.name,
                             "amount" to expense.amount,
@@ -62,10 +76,8 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                         )
                         newExpenseRef.setValue(expenseData)
                     }
-                    // Rysujemy wykres na podstawie mockExpenses
                     drawChart(mockExpenses)
                 } else {
-                    // BAZA ZAPEŁNIONA: Pobieramy i mapujemy dane
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
                         try {
@@ -82,25 +94,119 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                             Log.e("FirebaseXML", "Błąd parsowania wydatku w XML: ${e.message}")
                         }
                     }
-                    // Rysujemy wykres używając pobranych danych
                     drawChart(fetchedExpenses)
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
                 Log.e("FirebaseXML", "Błąd połączenia z bazą danych: ${error.message}")
-                Toast.makeText(this@ExpensesChartXmlActivity, "Błąd wczytywania danych z bazy", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ExpensesChartXmlActivity, "Błąd wczytywania danych", Toast.LENGTH_SHORT).show()
             }
-        })
+        }
+
+        databaseRef!!.addValueEventListener(valueEventListener!!)
+
+        // 2. Obsługa kliknięcia przycisku FAB
+        fabAddExpense.setOnClickListener {
+            showAddExpenseDialog()
+        }
     }
 
-    // Funkcja wywoływana, gdy mamy już gotową listę danych
+    override fun onDestroy() {
+        super.onDestroy()
+        // Usuwamy nasłuchiwacz, by uniknąć wycieków pamięci
+        valueEventListener?.let { databaseRef?.removeEventListener(it) }
+    }
+
+    private fun showAddExpenseDialog() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_expense, null)
+
+        val etName = dialogView.findViewById<TextInputEditText>(R.id.etExpenseName)
+        val etAmount = dialogView.findViewById<TextInputEditText>(R.id.etExpenseAmount)
+        val etDate = dialogView.findViewById<TextInputEditText>(R.id.etExpenseDate)
+        val spinnerCategory = dialogView.findViewById<AutoCompleteTextView>(R.id.spinnerCategory)
+
+        // Konfiguracja kategorii (AutoCompleteTextView jako Dropdown)
+        val categories = ExpenseCategory.values()
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_dropdown_item_1line,
+            categories.map { it.displayName }
+        )
+        spinnerCategory.setAdapter(adapter)
+
+        // Domyślna wartość w polu kategorii
+        if (categories.isNotEmpty()) {
+            spinnerCategory.setText(categories[0].displayName, false)
+        }
+
+        // Konfiguracja wyboru daty
+        var selectedDate = LocalDate.now()
+        etDate.setText(selectedDate.toString())
+
+        etDate.setOnClickListener {
+            val calendar = Calendar.getInstance()
+            DatePickerDialog(
+                this,
+                { _, year, month, dayOfMonth ->
+                    selectedDate = LocalDate.of(year, month + 1, dayOfMonth)
+                    etDate.setText(selectedDate.toString())
+                },
+                selectedDate.year,
+                selectedDate.monthValue - 1,
+                selectedDate.dayOfMonth
+            ).show()
+        }
+
+        // Walidacja kwoty (2 miejsca po przecinku)
+        etAmount.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val input = s.toString()
+                if (input.isNotEmpty() && !input.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                    etAmount.setText(input.dropLast(1))
+                    etAmount.setSelection(etAmount.text?.length ?: 0)
+                }
+            }
+        })
+
+        // Użycie MaterialAlertDialogBuilder dla stylu Material 3
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Dodaj wydatek")
+            .setView(dialogView)
+            .setPositiveButton("Dodaj") { _, _ ->
+                val name = etName.text.toString()
+                val amountText = etAmount.text.toString()
+                val finalAmount = amountText.toFloatOrNull() ?: 0f
+
+                val selectedCategoryName = spinnerCategory.text.toString()
+                val selectedCategory = categories.firstOrNull { it.displayName == selectedCategoryName } ?: ExpenseCategory.FOOD
+
+                if (name.isNotBlank() && finalAmount > 0) {
+                    val uid = FirebaseAuth.getInstance().currentUser?.uid
+                    if (uid != null) {
+                        val newExpenseRef = databaseRef!!.push()
+                        val expenseData = mapOf(
+                            "name" to name,
+                            "amount" to finalAmount,
+                            "date" to selectedDate.toString(),
+                            "category" to selectedCategory.name
+                        )
+                        newExpenseRef.setValue(expenseData)
+                    }
+                } else {
+                    Toast.makeText(this, "Wprowadź poprawne dane", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Wyjdź", null)
+            .show()
+    }
+
     private fun drawChart(expenses: List<Expense>) {
-        // 1. Ukrywamy ProgressBar i pokazujemy właściwy layout
         progressBar.visibility = View.GONE
         contentLayout.visibility = View.VISIBLE
 
-        // 2. Przeliczanie sum w kategoriach
         val categoryTotals = expenses.groupBy { it.category }
             .mapValues { entry -> entry.value.sumOf { it.amount.toDouble() }.toFloat() }
 
@@ -110,7 +216,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         } else 100f
         val stepValue = yAxisMax / 4
 
-        // 3. Etykiety osi Y
         findViewById<View>(R.id.gridLine4).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 4).toInt()}"
         findViewById<View>(R.id.gridLine3).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 3).toInt()}"
         findViewById<View>(R.id.gridLine2).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 2).toInt()}"
@@ -120,10 +225,8 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         val displayMetrics = resources.displayMetrics
         val cornerRadiusPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, displayMetrics)
 
-        // Oczyszczenie widoków przed ewentualnym ponownym narysowaniem
         barsContainer.removeAllViews()
 
-        // 4. Rysowanie i animacja słupków
         ExpenseCategory.values().forEach { category ->
             val totalForCategory = categoryTotals[category] ?: 0f
             val heightPercentage = if (yAxisMax > 0) totalForCategory / yAxisMax else 0f
@@ -141,7 +244,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             }
             tvCategoryName.text = category.displayName
 
-            // Ustawienie początkowe słupka ukrytego na 0
             val barParams = viewBar.layoutParams as LinearLayout.LayoutParams
             barParams.weight = 0.01f
             viewBar.layoutParams = barParams
@@ -150,7 +252,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             spacerParams.weight = 0.99f
             spacerTop.layoutParams = spacerParams
 
-            // Dodanie kolorów i okrągłych kątów
             val backgroundShape = GradientDrawable()
             backgroundShape.shape = GradientDrawable.RECTANGLE
             backgroundShape.setColor(category.color.toArgb())
@@ -161,7 +262,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             )
             viewBar.background = backgroundShape
 
-            // Akcja kliknięcia
             barContainer.setOnClickListener {
                 val intent = Intent(this, MainActivity::class.java)
                 startActivity(intent)
@@ -169,7 +269,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
 
             barsContainer.addView(barView)
 
-            // Logika animacji słupka
             val targetWeight = heightPercentage.coerceAtLeast(0.01f)
             val animator = ValueAnimator.ofFloat(0.01f, targetWeight)
             animator.duration = 1200
