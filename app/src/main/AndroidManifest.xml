@@ -36,6 +36,10 @@
             android:exported="true"
             android:theme="@style/Theme.MyFinances" />
         <activity
+            android:name=".CategoryDetailsActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MyFinances" />
+        <activity
             android:name=".ExpensesChartActivity"
             android:exported="false"
             android:label="@string/title_activity_expenses_chart"

@@ -239,7 +239,9 @@ fun ExpensesScreen() {
                                         modifier = Modifier
                                             .weight(1f)
                                             .clickable {
-                                                val intent = Intent(context, MainActivity::class.java)
+                                                val intent = Intent(context, CategoryDetailsActivity::class.java).apply {
+                                                    putExtra("CATEGORY_NAME", category.name)
+                                                }
                                                 context.startActivity(intent)
                                             }
                                     )

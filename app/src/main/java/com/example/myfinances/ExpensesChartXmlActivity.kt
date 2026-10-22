@@ -263,7 +263,9 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             viewBar.background = backgroundShape
 
             barContainer.setOnClickListener {
-                val intent = Intent(this, MainActivity::class.java)
+                val intent = Intent(this@ExpensesChartXmlActivity, CategoryDetailsXmlActivity::class.java).apply {
+                    putExtra("CATEGORY_NAME", category.name)
+                }
                 startActivity(intent)
             }
 
