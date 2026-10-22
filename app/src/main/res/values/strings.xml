@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">MyFinances</string>
+    <string name="title_activity_expenses_chart">ExpensesChartActivity</string>
 </resources>

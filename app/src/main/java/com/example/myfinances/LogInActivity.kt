@@ -28,7 +28,7 @@ class LogInActivity : AppCompatActivity() {
         val checkBox = preferences.getString("remember","")
         if(checkBox.equals("true"))
         {
-            val intent = Intent(this, MainActivity::class.java)
+            val intent = Intent(this, ExpensesChartXmlActivity::class.java)
             startActivity(intent)
         }
 
@@ -65,7 +65,7 @@ class LogInActivity : AppCompatActivity() {
                 if(isInternetAvailable()){
                     firebaseAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener { task ->
                         if (task.isSuccessful) {
-                            val intent = Intent(this, MainActivity::class.java)
+                            val intent = Intent(this, ExpensesChartXmlActivity::class.java)
                             startActivity(intent)
                         } else {
                             when (val exception = task.exception) {
@@ -98,7 +98,7 @@ class LogInActivity : AppCompatActivity() {
 
 
                         Toast.makeText(this, "DevLogin", Toast.LENGTH_SHORT).show()
-                        val intent = Intent(this, MainActivity::class.java)
+                        val intent = Intent(this, ExpensesChartXmlActivity::class.java)
                         startActivity(intent)
                     } else {
                         // Handle login failure
