@@ -249,6 +249,19 @@ fun ExpensesScreen() {
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, ExpandableCategoriesActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .padding(bottom = 16.dp)
+                    ) {
+                        Text("Zobacz listę kategorii")
+                    }
                 }
             }
         }

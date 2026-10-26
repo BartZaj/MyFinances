@@ -22,7 +22,8 @@ enum class ExpenseCategory(val displayName: String, val color: Color) {
     FOOD("Jedzenie", Color(0xFF4CAF50)),
     TRANSPORT("Transport", Color(0xFF2196F3)),
     ENTERTAINMENT("Rozrywka", Color(0xFFFF9800)),
-    BILLS("Rachunki", Color(0xFFF44336))
+    BILLS("Rachunki", Color(0xFFF44336)),
+    OTHER("Inne", Color(0xFF9E9E9E))
 }
 
 // 2. Model pojedynczego wydatku
