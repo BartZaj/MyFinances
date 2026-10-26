@@ -1,11 +1,16 @@
 package com.example.myfinances
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.transition.ChangeBounds
+import android.transition.TransitionManager
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
@@ -35,7 +40,11 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
     }
 
     private fun loadData() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            progressBar.visibility = View.GONE
+            return
+        }
         val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
 
         databaseRef.addValueEventListener(object : ValueEventListener {
@@ -49,7 +58,6 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
                     fetchedExpenses.add(Expense(name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                 }
 
-                // Grupowanie
                 val grouped = fetchedExpenses.groupBy { it.category }
 
                 progressBar.visibility = View.GONE
@@ -68,13 +76,14 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
     private val categories = groupedExpenses.keys.toList()
+    private val expandedCategories = mutableSetOf<ExpenseCategory>()
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val headerLayout: RelativeLayout = view.findViewById(R.id.headerLayout)
         val colorIndicator: View = view.findViewById(R.id.colorIndicator)
         val tvCategoryName: TextView = view.findViewById(R.id.tvCategoryName)
         val tvCategoryTotal: TextView = view.findViewById(R.id.tvCategoryTotal)
-        val ivArrow: android.widget.ImageView = view.findViewById(R.id.ivArrow) // Dodana strzałka
+        val ivArrow: ImageView = view.findViewById(R.id.ivArrow)
         val expandableContent: LinearLayout = view.findViewById(R.id.expandableContent)
     }
 
@@ -91,11 +100,10 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
         holder.tvCategoryName.text = category.displayName
         holder.tvCategoryTotal.text = "${total.toInt()} zł"
 
-        // Ustawienie dynamicznego koloru z enum ExpenseCategory
         val shape = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = 8f
-            setColor(category.color.toArgb()) // Przekonwertowanie koloru Compose na kolor Androida
+            setColor(category.color.toArgb())
         }
         holder.colorIndicator.background = shape
 
@@ -107,17 +115,28 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     setMargins(0, 8, 0, 8)
                 }
+
+                val outValue = TypedValue()
+                holder.itemView.context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                setBackgroundResource(outValue.resourceId)
+                isClickable = true
+                isFocusable = true
             }
 
             val tvName = TextView(holder.itemView.context).apply {
                 text = expense.name
-                setTextColor(android.graphics.Color.DKGRAY)
+                setTextColor(Color.DKGRAY)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
 
             val tvAmount = TextView(holder.itemView.context).apply {
                 text = "- ${expense.amount.toInt()} zł"
-                setTextColor(android.graphics.Color.GRAY)
+                setTextColor(Color.GRAY)
+            }
+
+            row.setOnClickListener {
+                val intent = Intent(holder.itemView.context, MainActivity::class.java)
+                holder.itemView.context.startActivity(intent)
             }
 
             row.addView(tvName)
@@ -125,19 +144,32 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
             holder.expandableContent.addView(row)
         }
 
-        // Mechanizm rozwijania i animacji strzałki
-        var isExpanded = false
-        holder.ivArrow.rotation = 0f // Reset rotacji po recyklingu widoku
+        val isExpanded = expandedCategories.contains(category)
+
+        holder.expandableContent.visibility = if (isExpanded) View.VISIBLE else View.GONE
+        holder.ivArrow.rotation = if (isExpanded) 180f else 0f
 
         holder.headerLayout.setOnClickListener {
-            isExpanded = !isExpanded
-            holder.expandableContent.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            val currentlyExpanded = expandedCategories.contains(category)
+            val parent = holder.itemView.parent as? ViewGroup
 
-            // Płynny obrót strzałki o 180 stopni
-            holder.ivArrow.animate()
-                .rotation(if (isExpanded) 180f else 0f)
-                .setDuration(200)
-                .start()
+            if (parent != null) {
+                // Zastąpiono AutoTransition za pomocą ChangeBounds w celu wyeliminowania opóźnienia Fade-in
+                TransitionManager.beginDelayedTransition(
+                    parent,
+                    ChangeBounds().apply { duration = 250 }
+                )
+            }
+
+            if (currentlyExpanded) {
+                expandedCategories.remove(category)
+                holder.expandableContent.visibility = View.GONE
+                holder.ivArrow.animate().rotation(0f).setDuration(250).start()
+            } else {
+                expandedCategories.add(category)
+                holder.expandableContent.visibility = View.VISIBLE
+                holder.ivArrow.animate().rotation(180f).setDuration(250).start()
+            }
         }
     }
 

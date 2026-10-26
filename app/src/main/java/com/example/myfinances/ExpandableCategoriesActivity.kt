@@ -1,5 +1,6 @@
 package com.example.myfinances
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,6 +112,9 @@ fun ExpandableCategoriesScreen() {
 fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
     var expanded by remember { mutableStateOf(false) }
 
+    // Pobranie kontekstu wymaganego do uruchomienia nowej aktywności
+    val context = LocalContext.current
+
     // Optymalizacja: Zapamiętanie sumy, aby nie przeliczać jej na nowo w każdej klatce animacji
     val totalSum = remember(expenses) {
         expenses.sumOf { it.amount.toDouble() }.toFloat()
@@ -165,7 +170,14 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                 ) {
                     expenses.forEach { expense ->
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // NOWE: Dodanie klikalności z efektem wizualnym dla pojedynczego wydatku
+                                .clickable {
+                                    val intent = Intent(context, MainActivity::class.java)
+                                    context.startActivity(intent)
+                                }
+                                .padding(vertical = 4.dp), // Lekki padding dla wygodniejszego klikania palcem
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = expense.name, color = Color.DarkGray)
