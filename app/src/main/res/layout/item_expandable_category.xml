@@ -18,7 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="16dp"
-            android:background="?attr/selectableItemBackground"
+            android:background="@android:color/transparent"
             android:clickable="true"
             android:focusable="true">
 
@@ -46,7 +46,7 @@
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
                 android:layout_marginStart="8dp"
-                android:src="@android:drawable/arrow_down_float"
+                android:src="@drawable/ic_arrow_down"
                 app:tint="#757575" />
 
             <TextView

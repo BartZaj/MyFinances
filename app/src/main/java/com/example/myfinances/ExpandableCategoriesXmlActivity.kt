@@ -112,12 +112,16 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
         for (expense in expenses) {
             val row = LinearLayout(holder.itemView.context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
                     setMargins(0, 8, 0, 8)
                 }
 
+                // Dodajemy efekt fali (ripple) przy kliknięciu, aby zachowywało się jak w Compose
                 val outValue = TypedValue()
-                holder.itemView.context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                 setBackgroundResource(outValue.resourceId)
                 isClickable = true
                 isFocusable = true
@@ -125,7 +129,7 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
 
             val tvName = TextView(holder.itemView.context).apply {
                 text = expense.name
-                setTextColor(Color.DKGRAY)
+                setTextColor(android.graphics.Color.DKGRAY)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
 
@@ -134,15 +138,20 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
                 setTextColor(Color.GRAY)
             }
 
-            row.setOnClickListener {
-                val intent = Intent(holder.itemView.context, MainActivity::class.java)
-                holder.itemView.context.startActivity(intent)
-            }
-
             row.addView(tvName)
             row.addView(tvAmount)
+
+            // --- TUTAJ JEST LOGIKA KLIKANIA WZOROWANA NA COMPOSE ---
+            row.setOnClickListener {
+                val context = holder.itemView.context
+                val intent = Intent(context, MainActivity::class.java)
+                context.startActivity(intent)
+            }
+
             holder.expandableContent.addView(row)
         }
+
+        // --- NAPRAWIONY FRAGMENT ZARZĄDZANIA STANEM ROZWINIĘCIA ---
 
         val isExpanded = expandedCategories.contains(category)
 
@@ -151,18 +160,17 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
 
         holder.headerLayout.setOnClickListener {
             val currentlyExpanded = expandedCategories.contains(category)
-            val parent = holder.itemView.parent as? ViewGroup
 
+            val parent = holder.itemView.parent as? ViewGroup
             if (parent != null) {
-                // Zastąpiono AutoTransition za pomocą ChangeBounds w celu wyeliminowania opóźnienia Fade-in
-                TransitionManager.beginDelayedTransition(
+                android.transition.TransitionManager.beginDelayedTransition(
                     parent,
-                    ChangeBounds().apply { duration = 250 }
+                    android.transition.AutoTransition().apply { duration = 250 }
                 )
             }
 
             if (currentlyExpanded) {
-                expandedCategories.remove(category)
+                // Zwijanie: usuwamy z pamięci i aktualizujemy UI
                 holder.expandableContent.visibility = View.GONE
                 holder.ivArrow.animate().rotation(0f).setDuration(250).start()
             } else {

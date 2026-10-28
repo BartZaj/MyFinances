@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +31,7 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 class ExpandableCategoriesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,7 +112,8 @@ fun ExpandableCategoriesScreen() {
 
 @Composable
 fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
-    var expanded by remember { mutableStateOf(false) }
+    // Użycie rememberSaveable zapobiega gubieniu stanu przy przewijaniu
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
     // Pobranie kontekstu wymaganego do uruchomienia nowej aktywności
     val context = LocalContext.current
@@ -119,6 +122,8 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
     val totalSum = remember(expenses) {
         expenses.sumOf { it.amount.toDouble() }.toFloat()
     }
+
+    val interactionSource = remember { MutableInteractionSource() }
 
     Card(
         modifier = Modifier
@@ -131,7 +136,10 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null // Wyłącza animację fali
+                    ) { expanded = !expanded }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -172,12 +180,11 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                // NOWE: Dodanie klikalności z efektem wizualnym dla pojedynczego wydatku
                                 .clickable {
                                     val intent = Intent(context, MainActivity::class.java)
                                     context.startActivity(intent)
                                 }
-                                .padding(vertical = 4.dp), // Lekki padding dla wygodniejszego klikania palcem
+                                .padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = expense.name, color = Color.DarkGray)
