@@ -170,7 +170,7 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
             }
 
             if (currentlyExpanded) {
-                // Zwijanie: usuwamy z pamięci i aktualizujemy UI
+                expandedCategories.remove(category)
                 holder.expandableContent.visibility = View.GONE
                 holder.ivArrow.animate().rotation(0f).setDuration(250).start()
             } else {
