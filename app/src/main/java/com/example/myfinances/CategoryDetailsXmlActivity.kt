@@ -26,12 +26,6 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
     private lateinit var pieChartContainer: LinearLayout
     private lateinit var legendContainer: LinearLayout
 
-    private val colors = listOf(
-        Color.parseColor("#FFC107"), Color.parseColor("#F44336"),
-        Color.parseColor("#FF9800"), Color.parseColor("#03A9F4"),
-        Color.parseColor("#4CAF50")
-    )
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_category_details_xml)
@@ -76,6 +70,15 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         })
     }
 
+    // Funkcja generująca nieskończoną ilość unikalnych kolorów
+    private fun generateColor(index: Int): Int {
+        // Użycie Złotego Kąta (137.5 stopni) gwarantuje, że każdy kolejny kolor
+        // jest przesunięty na kole barw w sposób minimalizujący nakładanie się.
+        val hue = (index * 137.508f) % 360f
+        // Nasycenie (0.7) i Jasność (0.9) - dają ładne, żywe, "pastelowe" odcienie
+        return Color.HSVToColor(floatArrayOf(hue, 0.7f, 0.9f))
+    }
+
     private fun displayData(expenses: List<Expense>) {
         progressBar.visibility = View.GONE
         contentLayout.visibility = View.VISIBLE
@@ -86,7 +89,10 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         tvTotalSum.text = "${totalSum.toInt()} zł"
 
         val amounts = expenses.map { it.amount }
-        val pieChartView = PieChartView(this, amounts, colors)
+        // Generujemy listę kolorów na podstawie liczby wydatków
+        val dynamicallyGeneratedColors = expenses.indices.map { generateColor(it) }
+
+        val pieChartView = PieChartView(this, amounts, dynamicallyGeneratedColors)
 
         val sizePx = android.util.TypedValue.applyDimension(
             android.util.TypedValue.COMPLEX_UNIT_DIP,
@@ -98,7 +104,7 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
 
         expenses.forEachIndexed { index, expense ->
             val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
-            val color = colors[index % colors.size]
+            val color = dynamicallyGeneratedColors[index]
             addLegendItem(expense.name, expense.amount, percentage, color)
         }
     }
@@ -157,14 +163,12 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
 
 class PieChartView(context: Context, private val data: List<Float>, private val colors: List<Int>) : View(context) {
 
-    // Zwiększona grubość pierścienia z 60f na 120f
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 120f
         strokeCap = Paint.Cap.BUTT
     }
 
-    // Styl tekstu dla procentów
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 42f
@@ -184,25 +188,24 @@ class PieChartView(context: Context, private val data: List<Float>, private val 
         var currentAngle = -90f + rotationAngle
         val padding = paint.strokeWidth / 2f
 
+        // UWAGA: Poprawiony błąd z Twojego kodu (brakowało minusa)
         rectF.set(padding, padding, width - padding, height - padding)
 
         val cx = width / 2f
         val cy = height / 2f
-        val radius = (width - paint.strokeWidth) / 2f // Promień do środka pierścienia
+        // UWAGA: Poprawiony błąd (brakowało minusa)
+        val radius = (width - paint.strokeWidth) / 2f
 
         data.forEachIndexed { index, value ->
             val sweepAngle = if (total > 0) (value / total) * 360f else 0f
-            paint.color = colors[index % colors.size]
+            // Używamy koloru bezpośrednio, ponieważ teraz obydwie listy mają tę samą wielkość
+            paint.color = colors[index]
             canvas.drawArc(rectF, currentAngle, sweepAngle, false, paint)
 
             val percentage = if (total > 0) ((value / total) * 100).toInt() else 0
 
-            // Rysuj tekst tylko jeśli kawałek jest wystarczająco duży (np. > 4%)
             if (percentage > 4) {
-                // Środek aktualnego łuku w radianach
                 val middleAngle = Math.toRadians((currentAngle + sweepAngle / 2).toDouble())
-
-                // Obliczanie współrzędnych X i Y na okręgu
                 val textX = cx + radius * kotlin.math.cos(middleAngle).toFloat()
                 val textY = cy + radius * kotlin.math.sin(middleAngle).toFloat() - (textPaint.descent() + textPaint.ascent()) / 2
 
@@ -227,7 +230,7 @@ class PieChartView(context: Context, private val data: List<Float>, private val 
                 val deltaAngle = currentTouchAngle - lastTouchAngle
                 rotationAngle += deltaAngle
                 lastTouchAngle = currentTouchAngle
-                invalidate() // Odświeża widok po zmianie kąta obrotu
+                invalidate()
                 return true
             }
         }

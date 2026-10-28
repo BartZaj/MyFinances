@@ -1,11 +1,11 @@
 package com.example.myfinances
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +19,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,12 +31,10 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.nativeCanvas
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+
 class CategoryDetailsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,8 +57,6 @@ class CategoryDetailsActivity : ComponentActivity() {
 fun CategoryDetailsScreen(categoryName: String) {
     var expensesList by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    val colors = listOf(Color(0xFFFFC107), Color(0xFFF44336), Color(0xFFFF9800), Color(0xFF03A9F4), Color(0xFF4CAF50))
 
     DisposableEffect(categoryName) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
@@ -92,6 +90,15 @@ fun CategoryDetailsScreen(categoryName: String) {
         onDispose { databaseRef.removeEventListener(listener) }
     }
 
+    // Dynamiczne generowanie kolorów (przelicza się ponownie tylko gdy zmieni się expensesList)
+    val dynamicColors = remember(expensesList) {
+        expensesList.indices.map { index ->
+            // Używamy Złotego Kąta, nasycenia 0.7 i jasności 0.9 dla ładnych kolorów
+            val hue = (index * 137.508f) % 360f
+            Color.hsv(hue = hue, saturation = 0.7f, value = 0.9f)
+        }
+    }
+
     if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -100,7 +107,9 @@ fun CategoryDetailsScreen(categoryName: String) {
         val totalSum = expensesList.sumOf { it.amount.toDouble() }.toFloat()
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -150,14 +159,12 @@ fun CategoryDetailsScreen(categoryName: String) {
                     val arcSize = Size(size.width - strokeWidthPx, size.height - strokeWidthPx)
 
                     val radius = (size.width - strokeWidthPx) / 2f
-                    val cx = size.width / 2f
-                    val cy = size.height / 2f
 
                     expensesList.forEachIndexed { index, expense ->
                         val sweepAngle = if (totalSum > 0) (expense.amount / totalSum) * 360f else 0f
 
                         drawArc(
-                            color = colors[index % colors.size],
+                            color = dynamicColors[index], // Zmiana tutaj: bierzemy wygenerowany kolor
                             startAngle = startAngle,
                             sweepAngle = sweepAngle,
                             useCenter = false,
@@ -195,12 +202,20 @@ fun CategoryDetailsScreen(categoryName: String) {
             Spacer(modifier = Modifier.height(32.dp))
 
             // Legenda poszczególnych wydatków
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            // UWAGA: Dodano weight(1f), aby tylko ta lista zajęła resztę wolnego miejsca i idealnie się przewijała
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
                 items(expensesList.withIndex().toList()) { (index, expense) ->
                     val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
+                    val itemColor = dynamicColors[index] // Pobieramy kolor dla danego wydatku
 
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -208,13 +223,13 @@ fun CategoryDetailsScreen(categoryName: String) {
                             Box(
                                 modifier = Modifier
                                     .size(16.dp)
-                                    .background(colors[index % colors.size], CircleShape)
+                                    .background(itemColor, CircleShape) // Używamy naszego koloru
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(text = expense.name, fontSize = 16.sp, color = Color.DarkGray)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "- ${expense.amount.toInt()} zł", color = colors[index % colors.size])
+                            Text(text = "- ${expense.amount.toInt()} zł", color = itemColor) // Używamy naszego koloru
                             Text(text = "$percentage%", fontSize = 12.sp, color = Color.Gray)
                         }
                     }
