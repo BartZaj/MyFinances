@@ -5,7 +5,9 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.transition.ChangeBounds
+import android.transition.Fade
 import android.transition.TransitionManager
+import android.transition.TransitionSet
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -17,6 +19,7 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
@@ -92,6 +95,13 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
         return ViewHolder(view)
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        super.onViewRecycled(holder)
+        holder.expandableContent.visibility = View.GONE
+        holder.expandableContent.removeAllViews()
+        holder.ivArrow.rotation = 0f
+    }
+
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
         val expenses = groupedExpenses[category] ?: emptyList()
@@ -100,26 +110,42 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
         holder.tvCategoryName.text = category.displayName
         holder.tvCategoryTotal.text = "${total.toInt()} zł"
 
-        val shape = GradientDrawable().apply {
+        // --- 1. STYL KARTY Z JETPACK COMPOSE (Material 3) ---
+        val baseColor = category.color.toArgb()
+        // Ustawiamy 15% nasycenia koloru (wartość 38 na 255) dla pastelowego tła
+        val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, 38)
+
+        val cardShape = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 48f // Nowoczesne, mocne zaokrąglenie rogów
+            setColor(composeLikeBackgroundColor)
+        }
+
+        // Nakładamy tło i dodajemy lekki padding, by tekst nie stykał się z krawędziami
+        holder.itemView.background = cardShape
+        holder.itemView.setPadding(30, 30, 30, 30)
+
+        // Znacznik koloru po lewej stronie pozostaje w 100% nasycony
+        val indicatorShape = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = 8f
-            setColor(category.color.toArgb())
+            setColor(baseColor)
         }
-        holder.colorIndicator.background = shape
+        holder.colorIndicator.background = indicatorShape
 
         holder.expandableContent.removeAllViews()
 
         for (expense in expenses) {
             val row = LinearLayout(holder.itemView.context).apply {
+                id = View.generateViewId() // <-- KLUCZOWE: ID pozwala animacji Fade śledzić ten wiersz!
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 8, 0, 8)
+                    setMargins(0, 15, 0, 15)
                 }
 
-                // Dodajemy efekt fali (ripple) przy kliknięciu, aby zachowywało się jak w Compose
                 val outValue = TypedValue()
                 context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                 setBackgroundResource(outValue.resourceId)
@@ -141,7 +167,6 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
             row.addView(tvName)
             row.addView(tvAmount)
 
-            // --- TUTAJ JEST LOGIKA KLIKANIA WZOROWANA NA COMPOSE ---
             row.setOnClickListener {
                 val context = holder.itemView.context
                 val intent = Intent(context, MainActivity::class.java)
@@ -151,8 +176,7 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
             holder.expandableContent.addView(row)
         }
 
-        // --- NAPRAWIONY FRAGMENT ZARZĄDZANIA STANEM ROZWINIĘCIA ---
-
+        // --- 2. NAPRAWIONA ANIMACJA ROZWIJANIA Z FADE-IN / FADE-OUT ---
         val isExpanded = expandedCategories.contains(category)
 
         holder.expandableContent.visibility = if (isExpanded) View.VISIBLE else View.GONE
@@ -160,13 +184,40 @@ class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory
 
         holder.headerLayout.setOnClickListener {
             val currentlyExpanded = expandedCategories.contains(category)
-
             val parent = holder.itemView.parent as? ViewGroup
+
             if (parent != null) {
-                android.transition.TransitionManager.beginDelayedTransition(
-                    parent,
-                    android.transition.AutoTransition().apply { duration = 250 }
-                )
+                val customTransition = TransitionSet().apply {
+                    ordering = TransitionSet.ORDERING_TOGETHER
+                    duration = 250
+
+                    // 1. Płynne zsuwanie/rozsuwanie wszystkich kart
+                    addTransition(ChangeBounds())
+
+                    // 2. NOWOŚĆ: Opóźniony Fade IN dla kart "wskakujących" z dołu
+                    // Karta ładująca się z dołu poczeka 100ms zanim zacznie się wyłaniać,
+                    // dając czas zamykanej kategorii na zwinięcie się.
+                    val incomingCardsFade = Fade(Fade.IN).apply {
+                        startDelay = 100 // Czekamy ułamek sekundy (aby uniknąć nałożenia)
+                        duration = 150   // Wyłaniamy się płynnie przez resztę czasu
+
+                        // Zabezpieczenie: upewniamy się, że to opóźnienie nie zepsuje
+                        // animacji tekstu (wydatków) na karcie, którą właśnie kliknęliśmy.
+                        excludeTarget(holder.expandableContent, true)
+                    }
+                    addTransition(incomingCardsFade)
+
+                    // 3. Pełne przenikanie zawartości (wydatków) klikniętej karty
+                    val fade = Fade().apply {
+                        addTarget(holder.expandableContent)
+                        for (i in 0 until holder.expandableContent.childCount) {
+                            addTarget(holder.expandableContent.getChildAt(i))
+                        }
+                    }
+                    addTransition(fade)
+                }
+
+                TransitionManager.beginDelayedTransition(parent, customTransition)
             }
 
             if (currentlyExpanded) {
