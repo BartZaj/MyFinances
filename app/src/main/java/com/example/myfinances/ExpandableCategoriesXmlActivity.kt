@@ -68,7 +68,14 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 
                 progressBar.visibility = View.GONE
                 recyclerView.visibility = View.VISIBLE
-                recyclerView.adapter = CategoryExpandableAdapter(grouped)
+                val currentAdapter = recyclerView.adapter as? CategoryExpandableAdapter
+                        if (currentAdapter == null) {
+                            // Pierwsze załadowanie - tworzymy adapter
+                            recyclerView.adapter = CategoryExpandableAdapter(grouped)
+                        } else {
+                            // Aktualizacja danych (np. po powrocie z edycji) - stan się zachowa
+                            currentAdapter.updateData(grouped)
+                        }
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -78,11 +85,22 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
     }
 }
 
-class CategoryExpandableAdapter(private val groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
+class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
-    private val categories = groupedExpenses.keys.toList()
+    private var categories = groupedExpenses.keys.toList()
     private val expandedCategories = mutableSetOf<ExpenseCategory>()
+
+    fun updateData(newGroupedExpenses: Map<ExpenseCategory, List<Expense>>) {
+        this.groupedExpenses = newGroupedExpenses
+        this.categories = newGroupedExpenses.keys.toList()
+
+        // Zabezpieczenie: usunięcie ze stanu rozwinięcia kategorii,
+        // które zostały całkowicie usunięte z bazy
+        expandedCategories.retainAll(categories.toSet())
+
+        notifyDataSetChanged()
+    }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val headerLayout: RelativeLayout = view.findViewById(R.id.headerLayout)
