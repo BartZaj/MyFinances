@@ -83,10 +83,13 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                     }
                     drawChart(mockExpenses)
                 } else {
+                    val currentMonth = LocalDate.now().monthValue
+                    val currentYear = LocalDate.now().year
+
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
                         try {
-                            val id = child.key ?: "" // Pobranie ID z Firebase
+                            val id = child.key ?: ""
                             val name = child.child("name").getValue(String::class.java) ?: ""
                             val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                             val dateStr = child.child("date").getValue(String::class.java) ?: ""
@@ -95,7 +98,10 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                             val date = LocalDate.parse(dateStr)
                             val category = ExpenseCategory.valueOf(categoryStr)
 
-                            fetchedExpenses.add(Expense(id, name, amount, date, category)) // Przekazanie id
+                            // DODANY WARUNEK: Tylko wydatki z bieżącego miesiąca i roku
+                            if (date.monthValue == currentMonth && date.year == currentYear) {
+                                fetchedExpenses.add(Expense(id, name, amount, date, category))
+                            }
                         } catch (e: Exception) {
                             Log.e("FirebaseXML", "Błąd parsowania wydatku w XML: ${e.message}")
                         }

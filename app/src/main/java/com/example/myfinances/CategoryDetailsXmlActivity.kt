@@ -50,16 +50,25 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
 
         databaseRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val currentMonth = LocalDate.now().monthValue
+                val currentYear = LocalDate.now().year
+
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ""
+
                     if (catStr == categoryName) {
-                        val id = child.key ?: "" // Pobranie ID z Firebase
+                        val id = child.key ?: ""
                         val name = child.child("name").getValue(String::class.java) ?: ""
                         val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                         val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
 
-                        fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                        val date = LocalDate.parse(dateStr)
+
+                        // DODANY WARUNEK: Tylko wydatki z bieżącego miesiąca i roku
+                        if (date.monthValue == currentMonth && date.year == currentYear) {
+                            fetchedExpenses.add(Expense(id, name, amount, date, ExpenseCategory.valueOf(catStr)))
+                        }
                     }
                 }
 
