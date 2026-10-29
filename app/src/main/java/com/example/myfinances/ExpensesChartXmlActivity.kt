@@ -86,6 +86,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
                         try {
+                            val id = child.key ?: "" // Pobranie ID z Firebase
                             val name = child.child("name").getValue(String::class.java) ?: ""
                             val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                             val dateStr = child.child("date").getValue(String::class.java) ?: ""
@@ -94,7 +95,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                             val date = LocalDate.parse(dateStr)
                             val category = ExpenseCategory.valueOf(categoryStr)
 
-                            fetchedExpenses.add(Expense(name, amount, date, category))
+                            fetchedExpenses.add(Expense(id, name, amount, date, category)) // Przekazanie id
                         } catch (e: Exception) {
                             Log.e("FirebaseXML", "Błąd parsowania wydatku w XML: ${e.message}")
                         }

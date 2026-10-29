@@ -72,10 +72,11 @@ fun CategoryDetailsScreen(categoryName: String) {
                 for (child in snapshot.children) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ""
                     if (catStr == categoryName) {
+                        val id = child.key ?: ""
                         val name = child.child("name").getValue(String::class.java) ?: ""
                         val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                         val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                        fetchedExpenses.add(Expense(name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                        fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                     }
                 }
                 expensesList = fetchedExpenses.sortedByDescending { it.amount }

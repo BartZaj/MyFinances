@@ -66,14 +66,13 @@ fun ExpandableCategoriesScreen() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
+                    val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
                     val name = child.child("name").getValue(String::class.java) ?: ""
                     val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                     val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-
-                    // Bezpieczne pobieranie kategorii z fallbackiem do OTHER
                     val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
-                    fetchedExpenses.add(Expense(name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                    fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                 }
 
                 groupedExpenses = fetchedExpenses.groupBy { it.category }

@@ -1,6 +1,7 @@
 package com.example.myfinances
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -53,10 +54,12 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
                 for (child in snapshot.children) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ""
                     if (catStr == categoryName) {
+                        val id = child.key ?: "" // Pobranie ID z Firebase
                         val name = child.child("name").getValue(String::class.java) ?: ""
                         val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                         val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                        fetchedExpenses.add(Expense(name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+
+                        fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                     }
                 }
 
@@ -86,10 +89,10 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         pieChartContainer.removeAllViews()
 
         val totalSum = expenses.sumOf { it.amount.toDouble() }.toFloat()
-        tvTotalSum.text = "${totalSum.toInt()} zł"
+        // Kwota do dwóch miejsc po przecinku
+        tvTotalSum.text = String.format("%.2f zł", totalSum)
 
         val amounts = expenses.map { it.amount }
-        // Generujemy listę kolorów na podstawie liczby wydatków
         val dynamicallyGeneratedColors = expenses.indices.map { generateColor(it) }
 
         val pieChartView = PieChartView(this, amounts, dynamicallyGeneratedColors)
@@ -105,18 +108,38 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         expenses.forEachIndexed { index, expense ->
             val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
             val color = dynamicallyGeneratedColors[index]
-            addLegendItem(expense.name, expense.amount, percentage, color)
+            // TU BYŁ BŁĄD: Przekazujemy cały obiekt 'expense', a nie tylko jego nazwę i kwotę
+            addLegendItem(expense, percentage, color)
         }
     }
 
-    private fun addLegendItem(name: String, amount: Float, percentage: Int, color: Int) {
+    // TU BYŁ BŁĄD: Przyjmujemy obiekt Expense jako argument
+    private fun addLegendItem(expense: Expense, percentage: Int, color: Int) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(0, 16, 0, 16)
             }
             gravity = Gravity.CENTER_VERTICAL
-        }
+
+            // TU BYŁ BŁĄD: Te linie muszą być wewnątrz bloku .apply {} obiektu row!
+            isClickable = true
+            isFocusable = true
+            val outValue = android.util.TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            setBackgroundResource(outValue.resourceId)
+
+            setOnClickListener {
+                val intent = Intent(this@CategoryDetailsXmlActivity, ExpenseDetailXMLActivity::class.java).apply {
+                    putExtra("EXTRA_ID", expense.id)
+                    putExtra("EXTRA_NAME", expense.name)
+                    putExtra("EXTRA_AMOUNT", expense.amount)
+                    putExtra("EXTRA_DATE", expense.date.toString())
+                    putExtra("EXTRA_CATEGORY", expense.category.name)
+                }
+                startActivity(intent)
+            }
+        } // <- Tutaj zamyka się blok apply dla obiektu row
 
         val colorIndicator = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(40, 40).apply { setMargins(0, 0, 32, 0) }
@@ -127,7 +150,7 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         }
 
         val tvName = TextView(this).apply {
-            text = name
+            text = expense.name
             textSize = 16f
             setTextColor(Color.DKGRAY)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -139,7 +162,8 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         }
 
         val tvAmount = TextView(this).apply {
-            text = "- ${amount.toInt()} zł"
+            // TU BYŁ BŁĄD: Formatowanie do 2 miejsc po przecinku
+            text = String.format("- %.2f zł", expense.amount)
             setTextColor(color)
             textSize = 16f
         }
