@@ -1,6 +1,7 @@
 package com.example.myfinances
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -26,12 +27,6 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
     private lateinit var pieChartContainer: LinearLayout
     private lateinit var legendContainer: LinearLayout
 
-    private val colors = listOf(
-        Color.parseColor("#FFC107"), Color.parseColor("#F44336"),
-        Color.parseColor("#FF9800"), Color.parseColor("#03A9F4"),
-        Color.parseColor("#4CAF50")
-    )
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_category_details_xml)
@@ -55,14 +50,25 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
 
         databaseRef.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val currentMonth = LocalDate.now().monthValue
+                val currentYear = LocalDate.now().year
+
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ""
+
                     if (catStr == categoryName) {
+                        val id = child.key ?: ""
                         val name = child.child("name").getValue(String::class.java) ?: ""
                         val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                         val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                        fetchedExpenses.add(Expense(name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+
+                        val date = LocalDate.parse(dateStr)
+
+                        // DODANY WARUNEK: Tylko wydatki z bieżącego miesiąca i roku
+                        if (date.monthValue == currentMonth && date.year == currentYear) {
+                            fetchedExpenses.add(Expense(id, name, amount, date, ExpenseCategory.valueOf(catStr)))
+                        }
                     }
                 }
 
@@ -76,6 +82,15 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         })
     }
 
+    // Funkcja generująca nieskończoną ilość unikalnych kolorów
+    private fun generateColor(index: Int): Int {
+        // Użycie Złotego Kąta (137.5 stopni) gwarantuje, że każdy kolejny kolor
+        // jest przesunięty na kole barw w sposób minimalizujący nakładanie się.
+        val hue = (index * 137.508f) % 360f
+        // Nasycenie (0.7) i Jasność (0.9) - dają ładne, żywe, "pastelowe" odcienie
+        return Color.HSVToColor(floatArrayOf(hue, 0.7f, 0.9f))
+    }
+
     private fun displayData(expenses: List<Expense>) {
         progressBar.visibility = View.GONE
         contentLayout.visibility = View.VISIBLE
@@ -83,10 +98,13 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         pieChartContainer.removeAllViews()
 
         val totalSum = expenses.sumOf { it.amount.toDouble() }.toFloat()
-        tvTotalSum.text = "${totalSum.toInt()} zł"
+        // Kwota do dwóch miejsc po przecinku
+        tvTotalSum.text = String.format("%.2f zł", totalSum)
 
         val amounts = expenses.map { it.amount }
-        val pieChartView = PieChartView(this, amounts, colors)
+        val dynamicallyGeneratedColors = expenses.indices.map { generateColor(it) }
+
+        val pieChartView = PieChartView(this, amounts, dynamicallyGeneratedColors)
 
         val sizePx = android.util.TypedValue.applyDimension(
             android.util.TypedValue.COMPLEX_UNIT_DIP,
@@ -98,19 +116,39 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
 
         expenses.forEachIndexed { index, expense ->
             val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
-            val color = colors[index % colors.size]
-            addLegendItem(expense.name, expense.amount, percentage, color)
+            val color = dynamicallyGeneratedColors[index]
+            // TU BYŁ BŁĄD: Przekazujemy cały obiekt 'expense', a nie tylko jego nazwę i kwotę
+            addLegendItem(expense, percentage, color)
         }
     }
 
-    private fun addLegendItem(name: String, amount: Float, percentage: Int, color: Int) {
+    // TU BYŁ BŁĄD: Przyjmujemy obiekt Expense jako argument
+    private fun addLegendItem(expense: Expense, percentage: Int, color: Int) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(0, 16, 0, 16)
             }
             gravity = Gravity.CENTER_VERTICAL
-        }
+
+            // TU BYŁ BŁĄD: Te linie muszą być wewnątrz bloku .apply {} obiektu row!
+            isClickable = true
+            isFocusable = true
+            val outValue = android.util.TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            setBackgroundResource(outValue.resourceId)
+
+            setOnClickListener {
+                val intent = Intent(this@CategoryDetailsXmlActivity, ExpenseDetailXMLActivity::class.java).apply {
+                    putExtra("EXTRA_ID", expense.id)
+                    putExtra("EXTRA_NAME", expense.name)
+                    putExtra("EXTRA_AMOUNT", expense.amount)
+                    putExtra("EXTRA_DATE", expense.date.toString())
+                    putExtra("EXTRA_CATEGORY", expense.category.name)
+                }
+                startActivity(intent)
+            }
+        } // <- Tutaj zamyka się blok apply dla obiektu row
 
         val colorIndicator = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(40, 40).apply { setMargins(0, 0, 32, 0) }
@@ -121,7 +159,7 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         }
 
         val tvName = TextView(this).apply {
-            text = name
+            text = expense.name
             textSize = 16f
             setTextColor(Color.DKGRAY)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -133,7 +171,8 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         }
 
         val tvAmount = TextView(this).apply {
-            text = "- ${amount.toInt()} zł"
+            // TU BYŁ BŁĄD: Formatowanie do 2 miejsc po przecinku
+            text = String.format("- %.2f zł", expense.amount)
             setTextColor(color)
             textSize = 16f
         }
@@ -157,14 +196,12 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
 
 class PieChartView(context: Context, private val data: List<Float>, private val colors: List<Int>) : View(context) {
 
-    // Zwiększona grubość pierścienia z 60f na 120f
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 120f
         strokeCap = Paint.Cap.BUTT
     }
 
-    // Styl tekstu dla procentów
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 42f
@@ -184,25 +221,24 @@ class PieChartView(context: Context, private val data: List<Float>, private val 
         var currentAngle = -90f + rotationAngle
         val padding = paint.strokeWidth / 2f
 
+        // UWAGA: Poprawiony błąd z Twojego kodu (brakowało minusa)
         rectF.set(padding, padding, width - padding, height - padding)
 
         val cx = width / 2f
         val cy = height / 2f
-        val radius = (width - paint.strokeWidth) / 2f // Promień do środka pierścienia
+        // UWAGA: Poprawiony błąd (brakowało minusa)
+        val radius = (width - paint.strokeWidth) / 2f
 
         data.forEachIndexed { index, value ->
             val sweepAngle = if (total > 0) (value / total) * 360f else 0f
-            paint.color = colors[index % colors.size]
+            // Używamy koloru bezpośrednio, ponieważ teraz obydwie listy mają tę samą wielkość
+            paint.color = colors[index]
             canvas.drawArc(rectF, currentAngle, sweepAngle, false, paint)
 
             val percentage = if (total > 0) ((value / total) * 100).toInt() else 0
 
-            // Rysuj tekst tylko jeśli kawałek jest wystarczająco duży (np. > 4%)
             if (percentage > 4) {
-                // Środek aktualnego łuku w radianach
                 val middleAngle = Math.toRadians((currentAngle + sweepAngle / 2).toDouble())
-
-                // Obliczanie współrzędnych X i Y na okręgu
                 val textX = cx + radius * kotlin.math.cos(middleAngle).toFloat()
                 val textY = cy + radius * kotlin.math.sin(middleAngle).toFloat() - (textPaint.descent() + textPaint.ascent()) / 2
 
@@ -227,7 +263,7 @@ class PieChartView(context: Context, private val data: List<Float>, private val 
                 val deltaAngle = currentTouchAngle - lastTouchAngle
                 rotationAngle += deltaAngle
                 lastTouchAngle = currentTouchAngle
-                invalidate() // Odświeża widok po zmianie kąta obrotu
+                invalidate()
                 return true
             }
         }

@@ -13,16 +13,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
-import android.widget.EditText
+import android.widget.Button // Dodany import
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.AutoCompleteTextView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.toArgb
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
@@ -41,6 +39,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
     private lateinit var contentLayout: LinearLayout
     private lateinit var barsContainer: LinearLayout
     private lateinit var fabAddExpense: ExtendedFloatingActionButton
+    private lateinit var btnViewCategories: Button // Dodana deklaracja
 
     private var databaseRef: DatabaseReference? = null
     private var valueEventListener: ValueEventListener? = null
@@ -53,6 +52,13 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         contentLayout = findViewById(R.id.contentLayout)
         barsContainer = findViewById(R.id.barsContainer)
         fabAddExpense = findViewById(R.id.fabAddExpense)
+        btnViewCategories = findViewById(R.id.btnViewCategories) // Inicjalizacja przycisku
+
+        // Obsługa nawigacji do listy kategorii
+        btnViewCategories.setOnClickListener {
+            val intent = Intent(this, ExpandableCategoriesXmlActivity::class.java)
+            startActivity(intent)
+        }
 
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid == null) {
@@ -62,7 +68,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
 
         databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
 
-        // 1. Zmiana na addValueEventListener (nasłuchiwanie na żywo)
         valueEventListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!snapshot.exists() || !snapshot.hasChildren()) {
@@ -78,9 +83,13 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                     }
                     drawChart(mockExpenses)
                 } else {
+                    val currentMonth = LocalDate.now().monthValue
+                    val currentYear = LocalDate.now().year
+
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
                         try {
+                            val id = child.key ?: ""
                             val name = child.child("name").getValue(String::class.java) ?: ""
                             val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                             val dateStr = child.child("date").getValue(String::class.java) ?: ""
@@ -89,7 +98,10 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                             val date = LocalDate.parse(dateStr)
                             val category = ExpenseCategory.valueOf(categoryStr)
 
-                            fetchedExpenses.add(Expense(name, amount, date, category))
+                            // DODANY WARUNEK: Tylko wydatki z bieżącego miesiąca i roku
+                            if (date.monthValue == currentMonth && date.year == currentYear) {
+                                fetchedExpenses.add(Expense(id, name, amount, date, category))
+                            }
                         } catch (e: Exception) {
                             Log.e("FirebaseXML", "Błąd parsowania wydatku w XML: ${e.message}")
                         }
@@ -106,7 +118,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
 
         databaseRef!!.addValueEventListener(valueEventListener!!)
 
-        // 2. Obsługa kliknięcia przycisku FAB
         fabAddExpense.setOnClickListener {
             showAddExpenseDialog()
         }
@@ -114,7 +125,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Usuwamy nasłuchiwacz, by uniknąć wycieków pamięci
         valueEventListener?.let { databaseRef?.removeEventListener(it) }
     }
 
@@ -126,7 +136,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         val etDate = dialogView.findViewById<TextInputEditText>(R.id.etExpenseDate)
         val spinnerCategory = dialogView.findViewById<AutoCompleteTextView>(R.id.spinnerCategory)
 
-        // Konfiguracja kategorii (AutoCompleteTextView jako Dropdown)
         val categories = ExpenseCategory.values()
         val adapter = ArrayAdapter(
             this,
@@ -135,12 +144,10 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         )
         spinnerCategory.setAdapter(adapter)
 
-        // Domyślna wartość w polu kategorii
         if (categories.isNotEmpty()) {
             spinnerCategory.setText(categories[0].displayName, false)
         }
 
-        // Konfiguracja wyboru daty
         var selectedDate = LocalDate.now()
         etDate.setText(selectedDate.toString())
 
@@ -153,12 +160,11 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                     etDate.setText(selectedDate.toString())
                 },
                 selectedDate.year,
-                selectedDate.monthValue - 1,
+                selectedDate.monthValue - 1, // Upewnij się, że znak minusa pozostaje
                 selectedDate.dayOfMonth
             ).show()
         }
 
-        // Walidacja kwoty (2 miejsca po przecinku)
         etAmount.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {}
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -171,7 +177,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             }
         })
 
-        // Użycie MaterialAlertDialogBuilder dla stylu Material 3
         MaterialAlertDialogBuilder(this)
             .setTitle("Dodaj wydatek")
             .setView(dialogView)
@@ -283,7 +288,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                 val currentSpacerParams = spacerTop.layoutParams as LinearLayout.LayoutParams
 
                 currentBarParams.weight = currentWeight
-                currentSpacerParams.weight = 1f - currentWeight
+                currentSpacerParams.weight = 1f - currentWeight // Znak minusa dodany
 
                 viewBar.layoutParams = currentBarParams
                 spacerTop.layoutParams = currentSpacerParams

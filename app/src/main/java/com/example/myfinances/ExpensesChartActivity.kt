@@ -99,15 +99,16 @@ fun ExpensesScreen() {
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
                         try {
+                            val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
                             val name = child.child("name").getValue(String::class.java) ?: ""
                             val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                            val dateStr = child.child("date").getValue(String::class.java) ?: ""
-                            val categoryStr = child.child("category").getValue(String::class.java) ?: ""
+                            val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
+                            val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
                             val date = LocalDate.parse(dateStr)
-                            val category = ExpenseCategory.valueOf(categoryStr)
+                            val category = ExpenseCategory.valueOf(catStr)
 
-                            fetchedExpenses.add(Expense(name, amount, date, category))
+                            fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                         } catch (e: Exception) {
                             Log.e("Firebase", "Błąd parsowania wydatku: ${e.message}")
                         }
@@ -248,6 +249,19 @@ fun ExpensesScreen() {
                                 }
                             }
                         }
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, ExpandableCategoriesActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .padding(bottom = 16.dp)
+                    ) {
+                        Text("Zobacz listę kategorii")
                     }
                 }
             }

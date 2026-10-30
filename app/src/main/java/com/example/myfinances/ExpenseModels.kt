@@ -22,25 +22,23 @@ enum class ExpenseCategory(val displayName: String, val color: Color) {
     FOOD("Jedzenie", Color(0xFF4CAF50)),
     TRANSPORT("Transport", Color(0xFF2196F3)),
     ENTERTAINMENT("Rozrywka", Color(0xFFFF9800)),
-    BILLS("Rachunki", Color(0xFFF44336))
+    BILLS("Rachunki", Color(0xFFF44336)),
+    OTHER("Inne", Color(0xFF9E9E9E))
 }
 
 // 2. Model pojedynczego wydatku
+// Zaktualizuj swoją klasę Expense:
 data class Expense(
+    val id: String,
     val name: String,
     val amount: Float,
     val date: LocalDate,
     val category: ExpenseCategory
 )
 
-// 3. Przykładowe dane
 val mockExpenses = listOf(
-    Expense("Biedronka - zakupy", 150.50f, LocalDate.of(2026, 9, 20), ExpenseCategory.FOOD),
-    Expense("Paliwo Orlen", 250.00f, LocalDate.of(2026, 9, 21), ExpenseCategory.TRANSPORT),
-    Expense("Kino", 85.00f, LocalDate.of(2026, 9, 22), ExpenseCategory.ENTERTAINMENT),
-    Expense("Lidl", 90.00f, LocalDate.of(2026, 9, 23), ExpenseCategory.FOOD),
-    Expense("Prąd", 140.00f, LocalDate.of(2026, 9, 24), ExpenseCategory.BILLS),
-    Expense("Bilet miesięczny", 110.00f, LocalDate.of(2026, 9, 25), ExpenseCategory.TRANSPORT),
-    Expense("Wyjście na miasto", 120.00f, LocalDate.of(2026, 9, 25), ExpenseCategory.ENTERTAINMENT),
-    Expense("Restauracja - pizza", 40.50f, LocalDate.of(2026, 9, 28), ExpenseCategory.FOOD),
+    Expense("", "Biedronka - zakupy", 150.5f, LocalDate.now(), ExpenseCategory.FOOD),
+    Expense("", "Paliwo Orlen", 200.0f, LocalDate.now().minusDays(1), ExpenseCategory.TRANSPORT),
+    Expense("", "Kino", 45.0f, LocalDate.now().minusDays(2), ExpenseCategory.ENTERTAINMENT),
+    Expense("", "Abonament Spotify", 20.0f, LocalDate.now().minusDays(3), ExpenseCategory.OTHER)
 )

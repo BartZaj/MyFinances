@@ -37,8 +37,6 @@
             android:layout_width="match_parent"
             android:layout_height="320dp">
 
-            <!-- Siatka osi Y i Kontenery -->
-            <!-- Tutaj zostaje dokładnie to samo, co u Ciebie! -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -64,9 +62,18 @@
                 android:orientation="horizontal">
             </LinearLayout>
         </FrameLayout>
+
+        <!-- NOWY PRZYCISK: Przejście do listy kategorii -->
+        <Button
+            android:id="@+id/btnViewCategories"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:layout_marginHorizontal="16dp"
+            android:text="Zobacz listę kategorii" />
+
     </LinearLayout>
 
-    <!-- Przycisk DODAJ (w prawym dolnym rogu) -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabAddExpense"
         android:layout_width="wrap_content"

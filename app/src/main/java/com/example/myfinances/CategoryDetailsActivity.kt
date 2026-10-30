@@ -1,11 +1,13 @@
 package com.example.myfinances
 
+import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +21,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,12 +34,10 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.nativeCanvas
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+
 class CategoryDetailsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,8 +61,6 @@ fun CategoryDetailsScreen(categoryName: String) {
     var expensesList by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    val colors = listOf(Color(0xFFFFC107), Color(0xFFF44336), Color(0xFFFF9800), Color(0xFF03A9F4), Color(0xFF4CAF50))
-
     DisposableEffect(categoryName) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid == null) {
@@ -67,19 +68,43 @@ fun CategoryDetailsScreen(categoryName: String) {
             return@DisposableEffect onDispose {}
         }
 
-        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
+        val databaseRef =
+            FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val currentMonth = LocalDate.now().monthValue
+                val currentYear = LocalDate.now().year
+
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ""
+
                     if (catStr == categoryName) {
+                        val id = child.key ?: ""
                         val name = child.child("name").getValue(String::class.java) ?: ""
-                        val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                        val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                        fetchedExpenses.add(Expense(name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                        val amount =
+                            child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
+                        val dateStr =
+                            child.child("date").getValue(String::class.java) ?: LocalDate.now()
+                                .toString()
+
+                        val date = LocalDate.parse(dateStr)
+
+                        // FILTROWANIE: Bierzemy pod uwagę tylko wydatki z bieżącego miesiąca i roku
+                        if (date.monthValue == currentMonth && date.year == currentYear) {
+                            fetchedExpenses.add(
+                                Expense(
+                                    id,
+                                    name,
+                                    amount,
+                                    date,
+                                    ExpenseCategory.valueOf(catStr)
+                                )
+                            )
+                        }
                     }
                 }
+
                 expensesList = fetchedExpenses.sortedByDescending { it.amount }
                 isLoading = false
             }
@@ -92,25 +117,52 @@ fun CategoryDetailsScreen(categoryName: String) {
         onDispose { databaseRef.removeEventListener(listener) }
     }
 
+    // Dynamiczne generowanie kolorów (przelicza się ponownie tylko gdy zmieni się expensesList)
+    val dynamicColors = remember(expensesList) {
+        expensesList.indices.map { index ->
+            // Używamy Złotego Kąta, nasycenia 0.7 i jasności 0.9 dla ładnych kolorów
+            val hue = (index * 137.508f) % 360f
+            Color.hsv(hue = hue, saturation = 0.7f, value = 0.9f)
+        }
+    }
+
     if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
     } else {
+        // Obliczamy sumę wcześniej, bo wyświetlamy ją na samej górze
         val totalSum = expensesList.sumOf { it.amount.toDouble() }.toFloat()
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+            // Domyślnie elementy układają się do lewej krawędzi (jak w LinearLayout vertical bez gravity)
         ) {
+
+            // 1. NAGŁÓWEK (odpowiednik tvCategoryTitle)
             Text(
                 text = "Szczegóły: $categoryName",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(bottom = 32.dp)
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
             )
 
-            // Wykres pierścieniowy
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(250.dp)) {
+            // 2. SUMA (odpowiednik tvTotalSum)
+            Text(
+                text = String.format("Razem: %.2f zł", totalSum),
+                fontSize = 18.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+            )
+
+            // 3. WYKRES (odpowiednik pieChartContainer) - centrujemy go horyzontalnie
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally) // wyśrodkowanie tylko wykresu
+                    .padding(bottom = 16.dp) // Padding dodany PRZED size, aby działał jako margines zewnętrzny
+                    .size(250.dp)            // Dzięki temu Canvas ma wewnątrz idealne 250x250 dp
+            ) {
                 var rotationAngle by remember { mutableFloatStateOf(0f) }
 
                 val textPaint = remember {
@@ -131,12 +183,23 @@ fun CategoryDetailsScreen(categoryName: String) {
                                 onDragStart = { offset ->
                                     val cx = size.width / 2f
                                     val cy = size.height / 2f
-                                    lastAngle = Math.toDegrees(atan2((offset.y - cy).toDouble(), (offset.x - cx).toDouble())).toFloat()
+                                    lastAngle = Math.toDegrees(
+                                        atan2(
+                                            (offset.y - cy).toDouble(),
+                                            (offset.x - cx).toDouble()
+                                        )
+                                    ).toFloat()
                                 },
                                 onDrag = { change, _ ->
                                     val cx = size.width / 2f
                                     val cy = size.height / 2f
-                                    val currentAngle = Math.toDegrees(atan2((change.position.y - cy).toDouble(), (change.position.x - cx).toDouble())).toFloat()
+                                    val currentAngle = Math.toDegrees(
+                                        atan2(
+                                            (change.position.y - cy).toDouble(),
+                                            (change.position.x - cx).toDouble()
+                                        )
+                                    ).toFloat()
+
                                     rotationAngle += (currentAngle - lastAngle)
                                     lastAngle = currentAngle
                                 }
@@ -148,16 +211,14 @@ fun CategoryDetailsScreen(categoryName: String) {
 
                     val padding = strokeWidthPx / 2f
                     val arcSize = Size(size.width - strokeWidthPx, size.height - strokeWidthPx)
-
                     val radius = (size.width - strokeWidthPx) / 2f
-                    val cx = size.width / 2f
-                    val cy = size.height / 2f
 
                     expensesList.forEachIndexed { index, expense ->
-                        val sweepAngle = if (totalSum > 0) (expense.amount / totalSum) * 360f else 0f
+                        val sweepAngle =
+                            if (totalSum > 0) (expense.amount / totalSum) * 360f else 0f
 
                         drawArc(
-                            color = colors[index % colors.size],
+                            color = dynamicColors[index],
                             startAngle = startAngle,
                             sweepAngle = sweepAngle,
                             useCenter = false,
@@ -166,41 +227,60 @@ fun CategoryDetailsScreen(categoryName: String) {
                             topLeft = Offset(padding, padding)
                         )
 
-                        val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
+                        val percentage =
+                            if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
 
-                        // Rysowanie tekstu tylko dla kawałków większych niż 4%
                         if (percentage > 4) {
-                            val middleAngle = Math.toRadians((startAngle + sweepAngle / 2).toDouble())
+                            val middleAngle =
+                                Math.toRadians((startAngle + sweepAngle / 2).toDouble())
                             val cx = size.width / 2f
                             val cy = size.height / 2f
 
                             val textX = cx + radius * cos(middleAngle).toFloat()
-                            val textY = cy + radius * sin(middleAngle).toFloat() - (textPaint.descent() + textPaint.ascent()) / 2
+                            val textY =
+                                cy + radius * sin(middleAngle).toFloat() - (textPaint.descent() + textPaint.ascent()) / 2
 
-                            drawContext.canvas.nativeCanvas.drawText("$percentage%", textX, textY, textPaint)
+                            drawContext.canvas.nativeCanvas.drawText(
+                                "$percentage%",
+                                textX,
+                                textY,
+                                textPaint
+                            )
                         }
 
                         startAngle += sweepAngle
                     }
                 }
+            } // Koniec Box z wykresem
 
-                Text(
-                    text = "${totalSum.toInt()} zł",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Color.Blue,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            // 4. LISTA (odpowiednik ScrollView -> legendContainer)
+            val context = LocalContext.current
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Legenda poszczególnych wydatków
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f) // zajmuje resztę dostępnego miejsca, co pozwala na przewijanie (jak w ScrollView)
+            ) {
                 items(expensesList.withIndex().toList()) { (index, expense) ->
-                    val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
+                    val percentage =
+                        if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
+                    val itemColor = dynamicColors[index]
 
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent =
+                                    Intent(context, ExpenseDetailActivity::class.java).apply {
+                                        putExtra("EXTRA_ID", expense.id)
+                                        putExtra("EXTRA_NAME", expense.name)
+                                        putExtra("EXTRA_AMOUNT", expense.amount)
+                                        putExtra("EXTRA_DATE", expense.date.toString())
+                                        putExtra("EXTRA_CATEGORY", expense.category.name)
+                                    }
+                                context.startActivity(intent)
+                            }
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -208,13 +288,16 @@ fun CategoryDetailsScreen(categoryName: String) {
                             Box(
                                 modifier = Modifier
                                     .size(16.dp)
-                                    .background(colors[index % colors.size], CircleShape)
+                                    .background(itemColor, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(text = expense.name, fontSize = 16.sp, color = Color.DarkGray)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "- ${expense.amount.toInt()} zł", color = colors[index % colors.size])
+                            Text(
+                                text = String.format("- %.2f zł", expense.amount),
+                                color = itemColor
+                            )
                             Text(text = "$percentage%", fontSize = 12.sp, color = Color.Gray)
                         }
                     }
