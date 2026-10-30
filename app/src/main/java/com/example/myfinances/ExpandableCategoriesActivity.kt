@@ -97,6 +97,16 @@ fun ExpandableCategoriesScreen() {
             CircularProgressIndicator()
         }
     } else {
+        // DODANO: Wymuszenie stałej kolejności kategorii
+        val sortedCategories = remember(groupedExpenses) {
+            val order = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
+            groupedExpenses.keys.sortedBy { category ->
+                val index = order.indexOf(category.name)
+                // Jeśli kategoria nie jest na liście order, ląduje na samym końcu
+                if (index == -1) Int.MAX_VALUE else index
+            }
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
@@ -104,7 +114,7 @@ fun ExpandableCategoriesScreen() {
         ) {
             // Optymalizacja: Dodany parametr key zapobiegający zbędnym rekompozycjom całej listy
             items(
-                items = groupedExpenses.keys.toList(),
+                items = sortedCategories,
                 key = { category -> category.name }
             ) { category ->
                 val expenses = groupedExpenses[category] ?: emptyList()

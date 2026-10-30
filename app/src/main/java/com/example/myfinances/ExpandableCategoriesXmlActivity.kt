@@ -88,12 +88,27 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
-    private var categories = groupedExpenses.keys.toList()
+    // DODANO: Sztywny szyk kategorii ustalony w liście
+    private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
+
+    // DODANO: Funkcja pomocnicza sortująca zbiór kluczy
+    private fun sortCategories(keys: Set<ExpenseCategory>): List<ExpenseCategory> {
+        return keys.sortedBy { category ->
+            val index = categoryOrder.indexOf(category.name)
+            // Jeśli kategorii nie ma na liście, ląduje na samym końcu
+            if (index == -1) Int.MAX_VALUE else index
+        }
+    }
+
+    // ZMIANA: Użycie funkcji sortującej przy inicjalizacji
+    private var categories = sortCategories(groupedExpenses.keys)
     private val expandedCategories = mutableSetOf<ExpenseCategory>()
 
     fun updateData(newGroupedExpenses: Map<ExpenseCategory, List<Expense>>) {
         this.groupedExpenses = newGroupedExpenses
-        this.categories = newGroupedExpenses.keys.toList()
+
+        // ZMIANA: Użycie funkcji sortującej przy aktualizacji danych
+        this.categories = sortCategories(newGroupedExpenses.keys)
 
         // Zabezpieczenie: usunięcie ze stanu rozwinięcia kategorii,
         // które zostały całkowicie usunięte z bazy
@@ -133,21 +148,19 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
         // --- 1. STYL KARTY Z JETPACK COMPOSE (Material 3) ---
         val baseColor = category.color.toArgb()
-        // Ustawiamy 15% nasycenia koloru (wartość 38 na 255) dla pastelowego tła
         val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, 38)
 
         val cardShape = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = 48f // Nowoczesne, mocne zaokrąglenie rogów
+            cornerRadius = 48f
             setColor(composeLikeBackgroundColor)
         }
 
-        // Nakładamy tło i dodajemy lekki padding, by tekst nie stykał się z krawędziami
         holder.itemView.background = cardShape
         holder.itemView.setPadding(30, 30, 30, 30)
 
         val iconRes = when(category.name) {
-            "FOOD" -> R.drawable.baseline_directions_car_24 // Podmień na nazwy wygenerowanych przez siebie ikon
+            "FOOD" -> R.drawable.baseline_directions_car_24
             "TRANSPORT" -> R.drawable.baseline_directions_car_24
             "ENTERTAINMENT" -> R.drawable.baseline_directions_car_24
             else -> R.drawable.baseline_directions_car_24
@@ -158,7 +171,7 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
         for (expense in expenses) {
             val row = LinearLayout(holder.itemView.context).apply {
-                id = View.generateViewId() // <-- KLUCZOWE: ID pozwala animacji Fade śledzić ten wiersz!
+                id = View.generateViewId()
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -218,23 +231,15 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                     ordering = TransitionSet.ORDERING_TOGETHER
                     duration = 250
 
-                    // 1. Płynne zsuwanie/rozsuwanie wszystkich kart
                     addTransition(ChangeBounds())
 
-                    // 2. NOWOŚĆ: Opóźniony Fade IN dla kart "wskakujących" z dołu
-                    // Karta ładująca się z dołu poczeka 100ms zanim zacznie się wyłaniać,
-                    // dając czas zamykanej kategorii na zwinięcie się.
                     val incomingCardsFade = Fade(Fade.IN).apply {
-                        startDelay = 100 // Czekamy ułamek sekundy (aby uniknąć nałożenia)
-                        duration = 150   // Wyłaniamy się płynnie przez resztę czasu
-
-                        // Zabezpieczenie: upewniamy się, że to opóźnienie nie zepsuje
-                        // animacji tekstu (wydatków) na karcie, którą właśnie kliknęliśmy.
+                        startDelay = 100
+                        duration = 150
                         excludeTarget(holder.expandableContent, true)
                     }
                     addTransition(incomingCardsFade)
 
-                    // 3. Pełne przenikanie zawartości (wydatków) klikniętej karty
                     val fade = Fade().apply {
                         addTarget(holder.expandableContent)
                         for (i in 0 until holder.expandableContent.childCount) {
