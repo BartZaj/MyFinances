@@ -104,7 +104,7 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val headerLayout: RelativeLayout = view.findViewById(R.id.headerLayout)
-        val colorIndicator: View = view.findViewById(R.id.colorIndicator)
+        val iconIndicator: ImageView = view.findViewById(R.id.iconIndicator)
         val tvCategoryName: TextView = view.findViewById(R.id.tvCategoryName)
         val tvCategoryTotal: TextView = view.findViewById(R.id.tvCategoryTotal)
         val ivArrow: ImageView = view.findViewById(R.id.ivArrow)
@@ -146,13 +146,13 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
         holder.itemView.background = cardShape
         holder.itemView.setPadding(30, 30, 30, 30)
 
-        // Znacznik koloru po lewej stronie pozostaje w 100% nasycony
-        val indicatorShape = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 8f
-            setColor(baseColor)
+        val iconRes = when(category.name) {
+            "FOOD" -> R.drawable.baseline_directions_car_24 // Podmień na nazwy wygenerowanych przez siebie ikon
+            "TRANSPORT" -> R.drawable.baseline_directions_car_24
+            "ENTERTAINMENT" -> R.drawable.baseline_directions_car_24
+            else -> R.drawable.baseline_directions_car_24
         }
-        holder.colorIndicator.background = indicatorShape
+        holder.iconIndicator.setImageResource(iconRes)
 
         holder.expandableContent.removeAllViews()
 

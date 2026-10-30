@@ -22,17 +22,18 @@
             android:clickable="true"
             android:focusable="true">
 
-            <View
-                android:id="@+id/colorIndicator"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+            <ImageView
+                android:id="@+id/iconIndicator"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginEnd="16dp"
                 android:layout_centerVertical="true" />
 
             <TextView
                 android:id="@+id/tvCategoryName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_toEndOf="@id/colorIndicator"
+                android:layout_toEndOf="@id/iconIndicator"
                 android:layout_centerVertical="true"
                 android:layout_marginStart="16dp"
                 android:textSize="18sp"

@@ -1,10 +1,12 @@
 package com.example.myfinances
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,17 +71,28 @@ fun CategoryDetailsScreen(categoryName: String) {
         val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val currentMonth = LocalDate.now().monthValue
+                val currentYear = LocalDate.now().year
+
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ""
+
                     if (catStr == categoryName) {
                         val id = child.key ?: ""
                         val name = child.child("name").getValue(String::class.java) ?: ""
                         val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                         val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                        fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+
+                        val date = LocalDate.parse(dateStr)
+
+                        // FILTROWANIE: Bierzemy pod uwagę tylko wydatki z bieżącego miesiąca i roku
+                        if (date.monthValue == currentMonth && date.year == currentYear) {
+                            fetchedExpenses.add(Expense(id, name, amount, date, ExpenseCategory.valueOf(catStr)))
+                        }
                     }
                 }
+
                 expensesList = fetchedExpenses.sortedByDescending { it.amount }
                 isLoading = false
             }
@@ -147,6 +161,7 @@ fun CategoryDetailsScreen(categoryName: String) {
                                     val cx = size.width / 2f
                                     val cy = size.height / 2f
                                     val currentAngle = Math.toDegrees(atan2((change.position.y - cy).toDouble(), (change.position.x - cx).toDouble())).toFloat()
+
                                     rotationAngle += (currentAngle - lastAngle)
                                     lastAngle = currentAngle
                                 }
@@ -158,14 +173,13 @@ fun CategoryDetailsScreen(categoryName: String) {
 
                     val padding = strokeWidthPx / 2f
                     val arcSize = Size(size.width - strokeWidthPx, size.height - strokeWidthPx)
-
                     val radius = (size.width - strokeWidthPx) / 2f
 
                     expensesList.forEachIndexed { index, expense ->
                         val sweepAngle = if (totalSum > 0) (expense.amount / totalSum) * 360f else 0f
 
                         drawArc(
-                            color = dynamicColors[index], // Zmiana tutaj: bierzemy wygenerowany kolor
+                            color = dynamicColors[index],
                             startAngle = startAngle,
                             sweepAngle = sweepAngle,
                             useCenter = false,
@@ -192,8 +206,9 @@ fun CategoryDetailsScreen(categoryName: String) {
                     }
                 }
 
+                // Suma wyświetlana pod/wewnątrz wykresu sformatowana do 2 miejsc po przecinku
                 Text(
-                    text = "${totalSum.toInt()} zł",
+                    text = String.format("%.2f zł", totalSum),
                     style = MaterialTheme.typography.headlineLarge,
                     color = Color.Blue,
                     fontWeight = FontWeight.Bold
@@ -203,7 +218,8 @@ fun CategoryDetailsScreen(categoryName: String) {
             Spacer(modifier = Modifier.height(32.dp))
 
             // Legenda poszczególnych wydatków
-            // UWAGA: Dodano weight(1f), aby tylko ta lista zajęła resztę wolnego miejsca i idealnie się przewijała
+            val context = LocalContext.current
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -211,11 +227,22 @@ fun CategoryDetailsScreen(categoryName: String) {
             ) {
                 items(expensesList.withIndex().toList()) { (index, expense) ->
                     val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
-                    val itemColor = dynamicColors[index] // Pobieramy kolor dla danego wydatku
+                    val itemColor = dynamicColors[index]
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable {
+                                // INTENT DO SZCZEGÓŁÓW WYDATKU
+                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
+                                    putExtra("EXTRA_ID", expense.id)
+                                    putExtra("EXTRA_NAME", expense.name)
+                                    putExtra("EXTRA_AMOUNT", expense.amount)
+                                    putExtra("EXTRA_DATE", expense.date.toString())
+                                    putExtra("EXTRA_CATEGORY", expense.category.name)
+                                }
+                                context.startActivity(intent)
+                            }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -224,13 +251,14 @@ fun CategoryDetailsScreen(categoryName: String) {
                             Box(
                                 modifier = Modifier
                                     .size(16.dp)
-                                    .background(itemColor, CircleShape) // Używamy naszego koloru
+                                    .background(itemColor, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(text = expense.name, fontSize = 16.sp, color = Color.DarkGray)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "- ${expense.amount.toInt()} zł", color = itemColor) // Używamy naszego koloru
+                            // Kwota w legendzie sformatowana do 2 miejsc po przecinku
+                            Text(text = String.format("- %.2f zł", expense.amount), color = itemColor)
                             Text(text = "$percentage%", fontSize = 12.sp, color = Color.Gray)
                         }
                     }

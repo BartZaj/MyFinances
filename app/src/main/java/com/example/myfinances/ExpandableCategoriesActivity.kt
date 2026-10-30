@@ -32,6 +32,11 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.filled.DirectionsCar // Auto
+import androidx.compose.material.icons.filled.List          // Inne
+import androidx.compose.material.icons.filled.MusicNote     // Nutka
+import androidx.compose.material.icons.filled.ReceiptLong   // Rachunek/Lista
+import androidx.compose.material.icons.filled.ShoppingCart  // Jedzenie
 
 class ExpandableCategoriesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,13 +116,9 @@ fun ExpandableCategoriesScreen() {
 
 @Composable
 fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
-    // Użycie rememberSaveable zapobiega gubieniu stanu przy przewijaniu
     var expanded by rememberSaveable { mutableStateOf(false) }
-
-    // Pobranie kontekstu wymaganego do uruchomienia nowej aktywności
     val context = LocalContext.current
 
-    // Optymalizacja: Zapamiętanie sumy, aby nie przeliczać jej na nowo w każdej klatce animacji
     val totalSum = remember(expenses) {
         expenses.sumOf { it.amount.toDouble() }.toFloat()
     }
@@ -127,34 +128,45 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(), // Automatyczna animacja zmiany rozmiaru
+            .animateContentSize(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Nagłówek kategorii
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(
                         interactionSource = interactionSource,
-                        indication = null // Wyłącza animację fali
+                        indication = null
                     ) { expanded = !expanded }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .background(Color(category.color.toArgb()), shape = MaterialTheme.shapes.small)
+                    // MAPOWANIE: Wybór ikony na podstawie nazwy kategorii
+                    val categoryIcon = when(category.name) {
+                        "FOOD" -> Icons.Default.ShoppingCart
+                        "TRANSPORT" -> Icons.Default.DirectionsCar // Zmienione na Place, bo masz już ten import na górze pliku i nie wyrzuci błędu
+                        "ENTERTAINMENT" -> Icons.Default.MusicNote
+                        "BILLS" -> Icons.Default.ReceiptLong
+                        else -> Icons.Default.List // Domyślna ikona
+                    }
+
+                    // ZMIANA: Icon zamiast Box z tłem
+                    Icon(
+                        imageVector = categoryIcon,
+                        contentDescription = category.displayName,
+                        modifier = Modifier.size(28.dp),
+                        tint = Color(category.color.toArgb()) // Ikona przyjmuje kolor kategorii
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(text = category.displayName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // DODANO FORMATOWANIE:
                     Text(
-                        text = "${totalSum.toInt()} zł",
+                        text = String.format("%.2f zł", totalSum),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -166,7 +178,6 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                 }
             }
 
-            // Rozwijana lista wydatków
             if (expanded) {
                 Divider()
                 Column(
@@ -180,14 +191,22 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val intent = Intent(context, MainActivity::class.java)
+                                    // DODANO PRZEJŚCIE DO SZCZEGÓŁÓW Z DANYMI (tutaj ładujemy ExpenseDetailXMLActivity)
+                                    val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
+                                        putExtra("EXTRA_ID", expense.id)
+                                        putExtra("EXTRA_NAME", expense.name)
+                                        putExtra("EXTRA_AMOUNT", expense.amount)
+                                        putExtra("EXTRA_DATE", expense.date.toString())
+                                        putExtra("EXTRA_CATEGORY", expense.category.name)
+                                    }
                                     context.startActivity(intent)
                                 }
                                 .padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = expense.name, color = Color.DarkGray)
-                            Text(text = "- ${expense.amount.toInt()} zł", color = Color.Gray)
+                            // DODANO FORMATOWANIE:
+                            Text(text = String.format("- %.2f zł", expense.amount), color = Color.Gray)
                         }
                     }
                 }
