@@ -54,7 +54,6 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
-// Wewnątrz pętli for (child in snapshot.children) { ... }
                     val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
                     val name = child.child("name").getValue(String::class.java) ?: ""
                     val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
@@ -64,18 +63,21 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
                     fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                 }
 
-                val grouped = fetchedExpenses.groupBy { it.category }
+                // ZMIANA: Sortowanie całej listy wydatków po dacie malejąco (od najnowszego do najstarszego) przed grupowaniem
+                val grouped = fetchedExpenses
+                    .sortedByDescending { it.date }
+                    .groupBy { it.category }
 
                 progressBar.visibility = View.GONE
                 recyclerView.visibility = View.VISIBLE
                 val currentAdapter = recyclerView.adapter as? CategoryExpandableAdapter
-                        if (currentAdapter == null) {
-                            // Pierwsze załadowanie - tworzymy adapter
-                            recyclerView.adapter = CategoryExpandableAdapter(grouped)
-                        } else {
-                            // Aktualizacja danych (np. po powrocie z edycji) - stan się zachowa
-                            currentAdapter.updateData(grouped)
-                        }
+                if (currentAdapter == null) {
+                    // Pierwsze załadowanie - tworzymy adapter
+                    recyclerView.adapter = CategoryExpandableAdapter(grouped)
+                } else {
+                    // Aktualizacja danych (np. po powrocie z edycji) - stan się zachowa
+                    currentAdapter.updateData(grouped)
+                }
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -144,7 +146,8 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
         val total = expenses.sumOf { it.amount.toDouble() }.toFloat()
 
         holder.tvCategoryName.text = category.displayName
-        holder.tvCategoryTotal.text = "${total.toInt()} zł"
+        // ZMIANA: Formatowanie sumy kategorii do 2 miejsc po przecinku
+        holder.tvCategoryTotal.text = String.format("%.2f zł", total)
 
         // --- 1. STYL KARTY Z JETPACK COMPOSE (Material 3) ---
         val baseColor = category.color.toArgb()
@@ -194,7 +197,8 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             }
 
             val tvAmount = TextView(holder.itemView.context).apply {
-                text = "- ${expense.amount.toInt()} zł"
+                // ZMIANA: Formatowanie pojedynczego wydatku do 2 miejsc po przecinku
+                text = String.format("- %.2f zł", expense.amount)
                 setTextColor(Color.GRAY)
             }
 

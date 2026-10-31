@@ -56,8 +56,12 @@ class ExpandableCategoriesActivity : ComponentActivity() {
 
 @Composable
 fun ExpandableCategoriesScreen() {
-    var groupedExpenses by remember { mutableStateOf<Map<ExpenseCategory, List<Expense>>>(emptyMap()) }
+    var groupedExpenses by remember {mutableStateOf<Map<ExpenseCategory, List<Expense>>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
+
+    // DODANO: Globalny stan przechowujący nazwy rozwiniętych kategorii.
+    // Używamy List<String>, które rememberSaveable potrafi bez problemu zapisać w Bundle.
+    var expandedCategoryNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
     DisposableEffect(Unit) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
@@ -71,7 +75,7 @@ fun ExpandableCategoriesScreen() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
-                    val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
+                    val id = child.key ?: ""
                     val name = child.child("name").getValue(String::class.java) ?: ""
                     val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                     val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
@@ -97,12 +101,10 @@ fun ExpandableCategoriesScreen() {
             CircularProgressIndicator()
         }
     } else {
-        // DODANO: Wymuszenie stałej kolejności kategorii
         val sortedCategories = remember(groupedExpenses) {
             val order = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
             groupedExpenses.keys.sortedBy { category ->
                 val index = order.indexOf(category.name)
-                // Jeśli kategoria nie jest na liście order, ląduje na samym końcu
                 if (index == -1) Int.MAX_VALUE else index
             }
         }
@@ -112,21 +114,39 @@ fun ExpandableCategoriesScreen() {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Optymalizacja: Dodany parametr key zapobiegający zbędnym rekompozycjom całej listy
             items(
                 items = sortedCategories,
                 key = { category -> category.name }
             ) { category ->
-                val expenses = groupedExpenses[category] ?: emptyList()
-                ExpandableCategoryCard(category, expenses)
+                // ZMIANA: Sortowanie wydatków po dacie malejąco (od najnowszego do najstarszego)
+                val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
+                val isExpanded = expandedCategoryNames.contains(category.name)
+
+                ExpandableCategoryCard(
+                    category = category,
+                    expenses = expenses,
+                    isExpanded = isExpanded, // DODANO: Przekazanie stanu
+                    onExpandChange = { expanded -> // DODANO: Obsługa kliknięcia
+                        expandedCategoryNames = if (expanded) {
+                            expandedCategoryNames + category.name
+                        } else {
+                            expandedCategoryNames - category.name
+                        }
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+fun ExpandableCategoryCard(
+    category: ExpenseCategory,
+    expenses: List<Expense>,
+    isExpanded: Boolean, // DODANO: Otrzymuje stan z zewnątrz
+    onExpandChange: (Boolean) -> Unit // DODANO: Przekazuje zmianę wyżej
+) {
+    // USUNIĘTO: var expanded by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     val totalSum = remember(expenses) {
@@ -148,33 +168,32 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                     .clickable(
                         interactionSource = interactionSource,
                         indication = null
-                    ) { expanded = !expanded }
+                    ) {
+                        onExpandChange(!isExpanded) // ZMIANA: Wywołanie funkcji zwrotnej
+                    }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // MAPOWANIE: Wybór ikony na podstawie nazwy kategorii
                     val categoryIcon = when(category.name) {
                         "FOOD" -> Icons.Default.ShoppingCart
-                        "TRANSPORT" -> Icons.Default.DirectionsCar // Zmienione na Place, bo masz już ten import na górze pliku i nie wyrzuci błędu
+                        "TRANSPORT" -> Icons.Default.DirectionsCar
                         "ENTERTAINMENT" -> Icons.Default.MusicNote
                         "BILLS" -> Icons.Default.ReceiptLong
-                        else -> Icons.Default.List // Domyślna ikona
+                        else -> Icons.Default.List
                     }
 
-                    // ZMIANA: Icon zamiast Box z tłem
                     Icon(
                         imageVector = categoryIcon,
                         contentDescription = category.displayName,
                         modifier = Modifier.size(28.dp),
-                        tint = Color(category.color.toArgb()) // Ikona przyjmuje kolor kategorii
+                        tint = Color(category.color.toArgb())
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(text = category.displayName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // DODANO FORMATOWANIE:
                     Text(
                         text = String.format("%.2f zł", totalSum),
                         fontWeight = FontWeight.Bold,
@@ -182,13 +201,13 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, // ZMIANA: Użycie isExpanded
                         contentDescription = "Rozwiń/Zwiń"
                     )
                 }
             }
 
-            if (expanded) {
+            if (isExpanded) { // ZMIANA: Użycie isExpanded
                 Divider()
                 Column(
                     modifier = Modifier
@@ -201,7 +220,6 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // DODANO PRZEJŚCIE DO SZCZEGÓŁÓW Z DANYMI (tutaj ładujemy ExpenseDetailXMLActivity)
                                     val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
                                         putExtra("EXTRA_ID", expense.id)
                                         putExtra("EXTRA_NAME", expense.name)
@@ -215,7 +233,6 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = expense.name, color = Color.DarkGray)
-                            // DODANO FORMATOWANIE:
                             Text(text = String.format("- %.2f zł", expense.amount), color = Color.Gray)
                         }
                     }
