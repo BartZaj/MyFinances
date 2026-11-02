@@ -40,67 +40,24 @@ import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpensesScreen() {
+fun ExpensesScreen(
+    expensesList: List<Expense>,
+    isLoading: Boolean
+) {
     DisposableEffect(Unit) {
         android.os.Trace.beginSection("ComposeScreen_ExpensesChart")
         onDispose {
-            Trace.endSection()
+            android.os.Trace.endSection()
         }
     }
-    val context = LocalContext.current
 
-    var expensesList by remember { mutableStateOf<List<Expense>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
 
-    DisposableEffect(Unit) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            isLoading = false
-            return@DisposableEffect onDispose {}
-        }
-
-        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
-
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists() || !snapshot.hasChildren()) {
-                    expensesList = emptyList()
-                    isLoading = false
-                } else {
-                    val fetchedExpenses = mutableListOf<Expense>()
-                    for (child in snapshot.children) {
-                        try {
-                            val id = child.key ?: ""
-                            val name = child.child("name").getValue(String::class.java) ?: ""
-                            val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                            val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                            val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
-
-                            fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
-                        } catch (e: Exception) {
-                            Log.e("Firebase", "Błąd parsowania wydatku: ${e.message}")
-                        }
-                    }
-                    expensesList = fetchedExpenses
-                    isLoading = false
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("Firebase", "Błąd bazy danych: ${error.message}")
-                isLoading = false
-            }
-        }
-
-        databaseRef.addValueEventListener(listener)
-
-        onDispose {
-            databaseRef.removeEventListener(listener)
-        }
-    }
+    // TUTAJ USUNIĘTO CAŁY BLOK DisposableEffect Z FIREBASE
 
     Scaffold(
+// ... reszta kodu widoku pozostaje bez zmian ...
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAddDialog = true },

@@ -26,11 +26,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
 import java.util.Calendar
 
@@ -41,8 +37,13 @@ class ExpensesChartFragment : Fragment() {
     private lateinit var barsContainer: LinearLayout
     private lateinit var fabAddExpense: ExtendedFloatingActionButton
 
-    private var databaseRef: DatabaseReference? = null
-    private var valueEventListener: ValueEventListener? = null
+    private val animators = mutableListOf<ValueAnimator>()
+
+    private val dataListener: (List<Expense>) -> Unit = { expenses ->
+        if (isAdded) {
+            drawChart(expenses)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -56,66 +57,6 @@ class ExpensesChartFragment : Fragment() {
         barsContainer = view.findViewById(R.id.barsContainer)
         fabAddExpense = view.findViewById(R.id.fabAddExpense)
 
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            Toast.makeText(requireContext(), "Brak zalogowanego użytkownika!", Toast.LENGTH_SHORT).show()
-            Trace.endSection()
-            return view
-        }
-
-        databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
-
-        valueEventListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists() || !snapshot.hasChildren()) {
-                    mockExpenses.forEach { expense ->
-                        val newExpenseRef = databaseRef!!.push()
-                        val expenseData = mapOf(
-                            "name" to expense.name,
-                            "amount" to expense.amount,
-                            "date" to expense.date.toString(),
-                            "category" to expense.category.name
-                        )
-                        newExpenseRef.setValue(expenseData)
-                    }
-                    drawChart(mockExpenses)
-                } else {
-                    val currentMonth = LocalDate.now().monthValue
-                    val currentYear = LocalDate.now().year
-
-                    val fetchedExpenses = mutableListOf<Expense>()
-                    for (child in snapshot.children) {
-                        try {
-                            val id = child.key ?: ""
-                            val name = child.child("name").getValue(String::class.java) ?: ""
-                            val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                            val dateStr = child.child("date").getValue(String::class.java) ?: ""
-                            val categoryStr = child.child("category").getValue(String::class.java) ?: ""
-
-                            val date = LocalDate.parse(dateStr)
-                            val category = ExpenseCategory.valueOf(categoryStr)
-
-                            if (date.monthValue == currentMonth && date.year == currentYear) {
-                                fetchedExpenses.add(Expense(id, name, amount, date, category))
-                            }
-                        } catch (e: Exception) {
-                            Log.e("FirebaseXML", "Błąd parsowania wydatku w XML: ${e.message}")
-                        }
-                    }
-                    drawChart(fetchedExpenses)
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("FirebaseXML", "Błąd połączenia z bazą danych: ${error.message}")
-                if (isAdded) {
-                    Toast.makeText(requireContext(), "Błąd wczytywania danych", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        databaseRef!!.addValueEventListener(valueEventListener!!)
-
         fabAddExpense.setOnClickListener {
             showAddExpenseDialog()
         }
@@ -124,9 +65,24 @@ class ExpensesChartFragment : Fragment() {
         return view
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        val mainActivity = activity as? MainXmlActivity
+        if (mainActivity?.isDataLoaded == false) {
+            progressBar.visibility = View.VISIBLE
+            contentLayout.visibility = View.GONE
+        }
+
+        mainActivity?.addDataListener(dataListener)
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
-        valueEventListener?.let { databaseRef?.removeEventListener(it) }
+        (activity as? MainXmlActivity)?.removeDataListener(dataListener)
+
+        animators.forEach { it.cancel() }
+        animators.clear()
     }
 
     private fun showAddExpenseDialog() {
@@ -192,7 +148,8 @@ class ExpensesChartFragment : Fragment() {
                 if (name.isNotBlank() && finalAmount > 0) {
                     val uid = FirebaseAuth.getInstance().currentUser?.uid
                     if (uid != null) {
-                        val newExpenseRef = databaseRef!!.push()
+                        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
+                        val newExpenseRef = databaseRef.push()
                         val expenseData = mapOf(
                             "name" to name,
                             "amount" to finalAmount,
@@ -230,6 +187,9 @@ class ExpensesChartFragment : Fragment() {
 
         val displayMetrics = resources.displayMetrics
         val cornerRadiusPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, displayMetrics)
+
+        animators.forEach { it.cancel() }
+        animators.clear()
 
         barsContainer.removeAllViews()
 
@@ -280,7 +240,6 @@ class ExpensesChartFragment : Fragment() {
             val targetWeight = heightPercentage.coerceAtLeast(0.01f)
             val animator = ValueAnimator.ofFloat(0.01f, targetWeight)
             animator.duration = 1200
-            animator.startDelay = 100
             animator.interpolator = DecelerateInterpolator()
 
             animator.addUpdateListener { animation ->
@@ -295,6 +254,7 @@ class ExpensesChartFragment : Fragment() {
                 spacerTop.layoutParams = currentSpacerParams
             }
 
+            animators.add(animator)
             animator.start()
         }
     }
