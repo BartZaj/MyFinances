@@ -28,10 +28,6 @@
             </intent-filter>
         </activity> <!-- Aktywność Jetpack Compose zachowuje domyślny motyw projektu -->
         <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.MyFinances" /> <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
-        <activity
             android:name=".SignUpCompose"
             android:exported="true"
             android:theme="@style/Theme.MyFinances" />
@@ -40,11 +36,15 @@
             android:exported="true"
             android:theme="@style/Theme.MyFinances" />
         <activity
-            android:name=".ExpandableCategoriesActivity"
+            android:name=".ExpenseDetailActivity"
             android:exported="true"
             android:theme="@style/Theme.MyFinances" />
         <activity
-            android:name=".ExpensesChartActivity"
+            android:name=".ExpandableCategoriesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyFinances" />
+        <activity
+            android:name=".MainActivity"
             android:exported="false"
             android:label="@string/title_activity_expenses_chart"
             android:theme="@style/Theme.MyFinances">

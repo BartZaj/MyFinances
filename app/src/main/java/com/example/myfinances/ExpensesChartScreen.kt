@@ -1,10 +1,8 @@
 package com.example.myfinances
 
 import android.content.Intent
-import android.os.Bundle
+import android.os.Trace
 import android.util.Log
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -31,7 +29,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.myfinances.ui.theme.MyFinancesTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -41,35 +38,21 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-class ExpensesChartActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent {
-            MyFinancesTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    ExpensesScreen()
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpensesScreen() {
+    DisposableEffect(Unit) {
+        android.os.Trace.beginSection("ComposeScreen_ExpensesChart")
+        onDispose {
+            Trace.endSection()
+        }
+    }
     val context = LocalContext.current
 
     var expensesList by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    // Flaga do wyświetlania okna dodawania wydatku
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // Używamy DisposableEffect z addValueEventListener,
-    // aby nasłuchiwać zmian w bazie NA ŻYWO.
     DisposableEffect(Unit) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid == null) {
@@ -82,31 +65,17 @@ fun ExpensesScreen() {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (!snapshot.exists() || !snapshot.hasChildren()) {
-                    // Baza pusta: inicjujemy przykładowymi danymi
-                    mockExpenses.forEach { expense ->
-                        val newExpenseRef = databaseRef.push()
-                        val expenseData = mapOf(
-                            "name" to expense.name,
-                            "amount" to expense.amount,
-                            "date" to expense.date.toString(),
-                            "category" to expense.category.name
-                        )
-                        newExpenseRef.setValue(expenseData)
-                    }
-                    expensesList = mockExpenses
+                    expensesList = emptyList()
                     isLoading = false
                 } else {
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
                         try {
-                            val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
+                            val id = child.key ?: ""
                             val name = child.child("name").getValue(String::class.java) ?: ""
                             val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                             val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
                             val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
-
-                            val date = LocalDate.parse(dateStr)
-                            val category = ExpenseCategory.valueOf(catStr)
 
                             fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                         } catch (e: Exception) {
@@ -126,7 +95,6 @@ fun ExpensesScreen() {
 
         databaseRef.addValueEventListener(listener)
 
-        // Odpięcie nasłuchiwacza przy niszczeniu widoku
         onDispose {
             databaseRef.removeEventListener(listener)
         }
@@ -250,19 +218,6 @@ fun ExpensesScreen() {
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Button(
-                        onClick = {
-                            val intent = Intent(context, ExpandableCategoriesActivity::class.java)
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .padding(bottom = 16.dp)
-                    ) {
-                        Text("Zobacz listę kategorii")
-                    }
                 }
             }
         }
@@ -305,7 +260,6 @@ fun AddExpenseDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
 
-    // Stan kalendarza (DatePicker)
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     )
@@ -341,7 +295,6 @@ fun AddExpenseDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Pole nazwy
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -350,7 +303,6 @@ fun AddExpenseDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Pole kwoty z weryfikacją do max 2 miejsc po przecinku
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { newValue ->
@@ -364,7 +316,6 @@ fun AddExpenseDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Pole daty (wywołujące kalendarz)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -374,7 +325,7 @@ fun AddExpenseDialog(
                         value = selectedDate.toString(),
                         onValueChange = {},
                         readOnly = true,
-                        enabled = false, // Wyłącza domyślne zachowanie wpisywania na rzecz kliknięcia w Box
+                        enabled = false,
                         label = { Text("Data") },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -385,7 +336,6 @@ fun AddExpenseDialog(
                     )
                 }
 
-                // Dropdown dla kategorii
                 ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
                     onExpandedChange = { categoryExpanded = !categoryExpanded },
@@ -478,10 +428,8 @@ fun BarChartItem(
                     .width(44.dp)
                     .fillMaxHeight()
                     .drawBehind {
-                        // POPRAWKA: Dodano znak mnożenia (*) oraz odejmowania (-)
                         val barHeightPx = size.height * animatedFraction.coerceAtLeast(0.01f)
                         val topY = size.height - barHeightPx
-
                         val cornerPx = 6.dp.toPx()
 
                         drawRoundRect(
@@ -505,7 +453,6 @@ fun BarChartItem(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        // POPRAWKA: Dodano znak mnożenia (*)
                         val barHeightPx = size.height * animatedFraction.coerceAtLeast(0.01f)
                         translationY = -barHeightPx - 4.dp.toPx()
                     },

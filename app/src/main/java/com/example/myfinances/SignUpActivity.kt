@@ -1,9 +1,7 @@
 package com.example.myfinances
 
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.security.identity.PersonalizationData
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.myfinances.databinding.ActivitySignupBinding
