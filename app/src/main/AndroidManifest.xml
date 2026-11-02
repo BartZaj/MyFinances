@@ -17,10 +17,10 @@
         tools:targetApi="31">
         <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
         <activity
-            android:name=".LogInCompose"
+            android:name=".LogInActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MyFinances">
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -28,28 +28,25 @@
             </intent-filter>
         </activity> <!-- Aktywność Jetpack Compose zachowuje domyślny motyw projektu -->
         <activity
-            android:name=".SignUpCompose"
+            android:name=".MainXmlActivity"
             android:exported="true"
-            android:theme="@style/Theme.MyFinances" />
+            android:theme="@style/Theme.Material3.DayNight.NoActionBar"/> <!-- Aktywność XML wymaga klasycznego motywu MaterialComponents -->
         <activity
-            android:name=".CategoryDetailsActivity"
+            android:name=".SignUpActivity"
             android:exported="true"
-            android:theme="@style/Theme.MyFinances" />
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
         <activity
-            android:name=".ExpenseDetailActivity"
+            android:name=".CategoryDetailsXmlActivity"
             android:exported="true"
-            android:theme="@style/Theme.MyFinances" />
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
         <activity
-            android:name=".ExpandableCategoriesActivity"
-            android:exported="false"
-            android:theme="@style/Theme.MyFinances" />
+            android:name=".ExpandableCategoriesXmlActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
         <activity
-            android:name=".MainActivity"
-            android:exported="false"
-            android:label="@string/title_activity_expenses_chart"
-            android:theme="@style/Theme.MyFinances">
-            <!-- Przenieś tu intent-filter jeśli chcesz żeby to był ekran startowy -->
-        </activity>
+            android:name=".ExpenseDetailXMLActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar" />
     </application>
 
 </manifest>

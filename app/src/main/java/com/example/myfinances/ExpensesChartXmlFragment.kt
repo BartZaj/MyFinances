@@ -5,25 +5,26 @@ import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Trace
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
-import android.widget.Button // Dodany import
+import android.widget.AutoCompleteTextView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.AutoCompleteTextView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.textfield.TextInputEditText
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.toArgb
+import androidx.fragment.app.Fragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -33,37 +34,33 @@ import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
 import java.util.Calendar
 
-class ExpensesChartXmlActivity : AppCompatActivity() {
+class ExpensesChartFragment : Fragment() {
 
     private lateinit var progressBar: ProgressBar
     private lateinit var contentLayout: LinearLayout
     private lateinit var barsContainer: LinearLayout
     private lateinit var fabAddExpense: ExtendedFloatingActionButton
-    private lateinit var btnViewCategories: Button // Dodana deklaracja
 
     private var databaseRef: DatabaseReference? = null
     private var valueEventListener: ValueEventListener? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_expenses_chart_xml)
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        Trace.beginSection("XMLScreen_ExpensesChart")
+        val view = inflater.inflate(R.layout.activity_expenses_chart_xml, container, false)
 
-        progressBar = findViewById(R.id.progressBar)
-        contentLayout = findViewById(R.id.contentLayout)
-        barsContainer = findViewById(R.id.barsContainer)
-        fabAddExpense = findViewById(R.id.fabAddExpense)
-        btnViewCategories = findViewById(R.id.btnViewCategories) // Inicjalizacja przycisku
-
-        // Obsługa nawigacji do listy kategorii
-        btnViewCategories.setOnClickListener {
-            val intent = Intent(this, ExpandableCategoriesXmlActivity::class.java)
-            startActivity(intent)
-        }
+        progressBar = view.findViewById(R.id.progressBar)
+        contentLayout = view.findViewById(R.id.contentLayout)
+        barsContainer = view.findViewById(R.id.barsContainer)
+        fabAddExpense = view.findViewById(R.id.fabAddExpense)
 
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid == null) {
-            Toast.makeText(this, "Brak zalogowanego użytkownika!", Toast.LENGTH_SHORT).show()
-            return
+            Toast.makeText(requireContext(), "Brak zalogowanego użytkownika!", Toast.LENGTH_SHORT).show()
+            Trace.endSection()
+            return view
         }
 
         databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
@@ -98,7 +95,6 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                             val date = LocalDate.parse(dateStr)
                             val category = ExpenseCategory.valueOf(categoryStr)
 
-                            // DODANY WARUNEK: Tylko wydatki z bieżącego miesiąca i roku
                             if (date.monthValue == currentMonth && date.year == currentYear) {
                                 fetchedExpenses.add(Expense(id, name, amount, date, category))
                             }
@@ -112,7 +108,9 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
 
             override fun onCancelled(error: DatabaseError) {
                 Log.e("FirebaseXML", "Błąd połączenia z bazą danych: ${error.message}")
-                Toast.makeText(this@ExpensesChartXmlActivity, "Błąd wczytywania danych", Toast.LENGTH_SHORT).show()
+                if (isAdded) {
+                    Toast.makeText(requireContext(), "Błąd wczytywania danych", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -121,15 +119,18 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         fabAddExpense.setOnClickListener {
             showAddExpenseDialog()
         }
+
+        Trace.endSection()
+        return view
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onDestroyView() {
+        super.onDestroyView()
         valueEventListener?.let { databaseRef?.removeEventListener(it) }
     }
 
     private fun showAddExpenseDialog() {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_expense, null)
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_expense, null)
 
         val etName = dialogView.findViewById<TextInputEditText>(R.id.etExpenseName)
         val etAmount = dialogView.findViewById<TextInputEditText>(R.id.etExpenseAmount)
@@ -138,7 +139,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
 
         val categories = ExpenseCategory.values()
         val adapter = ArrayAdapter(
-            this,
+            requireContext(),
             android.R.layout.simple_dropdown_item_1line,
             categories.map { it.displayName }
         )
@@ -154,13 +155,13 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         etDate.setOnClickListener {
             val calendar = Calendar.getInstance()
             DatePickerDialog(
-                this,
+                requireContext(),
                 { _, year, month, dayOfMonth ->
                     selectedDate = LocalDate.of(year, month + 1, dayOfMonth)
                     etDate.setText(selectedDate.toString())
                 },
                 selectedDate.year,
-                selectedDate.monthValue - 1, // Upewnij się, że znak minusa pozostaje
+                selectedDate.monthValue - 1,
                 selectedDate.dayOfMonth
             ).show()
         }
@@ -177,7 +178,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             }
         })
 
-        MaterialAlertDialogBuilder(this)
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Dodaj wydatek")
             .setView(dialogView)
             .setPositiveButton("Dodaj") { _, _ ->
@@ -201,7 +202,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                         newExpenseRef.setValue(expenseData)
                     }
                 } else {
-                    Toast.makeText(this, "Wprowadź poprawne dane", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Wprowadź poprawne dane", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Wyjdź", null)
@@ -221,11 +222,11 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
         } else 100f
         val stepValue = yAxisMax / 4
 
-        findViewById<View>(R.id.gridLine4).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 4).toInt()}"
-        findViewById<View>(R.id.gridLine3).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 3).toInt()}"
-        findViewById<View>(R.id.gridLine2).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 2).toInt()}"
-        findViewById<View>(R.id.gridLine1).findViewById<TextView>(R.id.tvYAxis).text = "${(stepValue * 1).toInt()}"
-        findViewById<View>(R.id.gridLine0).findViewById<TextView>(R.id.tvYAxis).text = "0"
+        view?.findViewById<View>(R.id.gridLine4)?.findViewById<TextView>(R.id.tvYAxis)?.text = "${(stepValue * 4).toInt()}"
+        view?.findViewById<View>(R.id.gridLine3)?.findViewById<TextView>(R.id.tvYAxis)?.text = "${(stepValue * 3).toInt()}"
+        view?.findViewById<View>(R.id.gridLine2)?.findViewById<TextView>(R.id.tvYAxis)?.text = "${(stepValue * 2).toInt()}"
+        view?.findViewById<View>(R.id.gridLine1)?.findViewById<TextView>(R.id.tvYAxis)?.text = "${(stepValue * 1).toInt()}"
+        view?.findViewById<View>(R.id.gridLine0)?.findViewById<TextView>(R.id.tvYAxis)?.text = "0"
 
         val displayMetrics = resources.displayMetrics
         val cornerRadiusPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, displayMetrics)
@@ -236,7 +237,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             val totalForCategory = categoryTotals[category] ?: 0f
             val heightPercentage = if (yAxisMax > 0) totalForCategory / yAxisMax else 0f
 
-            val barView = LayoutInflater.from(this).inflate(R.layout.item_bar_chart, barsContainer, false)
+            val barView = LayoutInflater.from(requireContext()).inflate(R.layout.item_bar_chart, barsContainer, false)
 
             val tvAmount = barView.findViewById<TextView>(R.id.tvAmount)
             val tvCategoryName = barView.findViewById<TextView>(R.id.tvCategoryName)
@@ -268,7 +269,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
             viewBar.background = backgroundShape
 
             barContainer.setOnClickListener {
-                val intent = Intent(this@ExpensesChartXmlActivity, CategoryDetailsXmlActivity::class.java).apply {
+                val intent = Intent(requireContext(), CategoryDetailsXmlActivity::class.java).apply {
                     putExtra("CATEGORY_NAME", category.name)
                 }
                 startActivity(intent)
@@ -288,7 +289,7 @@ class ExpensesChartXmlActivity : AppCompatActivity() {
                 val currentSpacerParams = spacerTop.layoutParams as LinearLayout.LayoutParams
 
                 currentBarParams.weight = currentWeight
-                currentSpacerParams.weight = 1f - currentWeight // Znak minusa dodany
+                currentSpacerParams.weight = 1f - currentWeight
 
                 viewBar.layoutParams = currentBarParams
                 spacerTop.layoutParams = currentSpacerParams

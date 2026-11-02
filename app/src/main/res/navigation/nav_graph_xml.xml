@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph_xml"
+    app:startDestination="@id/nav_chart">
+
+    <fragment
+        android:id="@+id/nav_chart"
+        android:name="com.example.myfinances.ExpensesChartFragment"
+        android:label="Wykres" />
+
+    <fragment
+        android:id="@+id/nav_categories_launcher"
+        android:name="com.example.myfinances.CategoriesLauncherFragment"
+        android:label="Kategorie" />
+</navigation>
