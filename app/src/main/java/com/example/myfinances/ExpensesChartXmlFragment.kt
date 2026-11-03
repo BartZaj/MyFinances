@@ -40,9 +40,17 @@ class ExpensesChartFragment : Fragment() {
     private val animators = mutableListOf<ValueAnimator>()
     private val categoryViews = mutableMapOf<ExpenseCategory, View>()
 
-    private val dataListener: (List<Expense>) -> Unit = { expenses ->
+    private val dataListener: (List<Expense>) -> Unit = { allExpenses ->
         if (isAdded) {
-            drawChart(expenses)
+            val currentMonth = LocalDate.now().monthValue
+            val currentYear = LocalDate.now().year
+
+            // Filtrowanie tylko dla tego konkretnego widoku
+            val currentMonthExpenses = allExpenses.filter {
+                it.date.monthValue == currentMonth && it.date.year == currentYear
+            }
+
+            drawChart(currentMonthExpenses)
         }
     }
 

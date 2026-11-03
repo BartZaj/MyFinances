@@ -63,8 +63,6 @@ class MainXmlActivity : AppCompatActivity() {
                     cachedExpenses = emptyList()
                     isDataLoaded = true
                 } else {
-                    val currentMonth = LocalDate.now().monthValue
-                    val currentYear = LocalDate.now().year
 
                     val fetchedExpenses = mutableListOf<Expense>()
                     for (child in snapshot.children) {
@@ -78,9 +76,9 @@ class MainXmlActivity : AppCompatActivity() {
                             val date = LocalDate.parse(dateStr)
                             val category = ExpenseCategory.valueOf(categoryStr)
 
-                            if (date.monthValue == currentMonth && date.year == currentYear) {
-                                fetchedExpenses.add(Expense(id, name, amount, date, category))
-                            }
+                            // USUŃ WARUNEK if (date.monthValue == currentMonth...) i po prostu dodaj wydatek:
+                            fetchedExpenses.add(Expense(id, name, amount, date, category))
+
                         } catch (e: Exception) {
                             Log.e("FirebaseXML", "Błąd parsowania: ${e.message}")
                         }
