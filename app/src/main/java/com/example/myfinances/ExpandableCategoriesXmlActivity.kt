@@ -63,10 +63,8 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
                     fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
                 }
 
-                // ZMIANA: Sortowanie całej listy wydatków po dacie malejąco (od najnowszego do najstarszego) przed grupowaniem
-                val grouped = fetchedExpenses
-                    .sortedByDescending { it.date }
-                    .groupBy { it.category }
+                // ZMIANA TUTAJ: Zgodnie z najlepszymi praktykami, najpierw tylko grupujemy całą listę.
+                val grouped = fetchedExpenses.groupBy { it.category }
 
                 progressBar.visibility = View.GONE
                 recyclerView.visibility = View.VISIBLE
@@ -90,10 +88,10 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
-    // DODANO: Sztywny szyk kategorii ustalony w liście
+    // Sztywny szyk kategorii ustalony w liście
     private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
 
-    // DODANO: Funkcja pomocnicza sortująca zbiór kluczy
+    // Funkcja pomocnicza sortująca zbiór kluczy
     private fun sortCategories(keys: Set<ExpenseCategory>): List<ExpenseCategory> {
         return keys.sortedBy { category ->
             val index = categoryOrder.indexOf(category.name)
@@ -102,20 +100,16 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
         }
     }
 
-    // ZMIANA: Użycie funkcji sortującej przy inicjalizacji
     private var categories = sortCategories(groupedExpenses.keys)
     private val expandedCategories = mutableSetOf<ExpenseCategory>()
 
     fun updateData(newGroupedExpenses: Map<ExpenseCategory, List<Expense>>) {
         this.groupedExpenses = newGroupedExpenses
-
-        // ZMIANA: Użycie funkcji sortującej przy aktualizacji danych
         this.categories = sortCategories(newGroupedExpenses.keys)
 
         // Zabezpieczenie: usunięcie ze stanu rozwinięcia kategorii,
         // które zostały całkowicie usunięte z bazy
         expandedCategories.retainAll(categories.toSet())
-
         notifyDataSetChanged()
     }
 
@@ -142,11 +136,12 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
-        val expenses = groupedExpenses[category] ?: emptyList()
+
+        // ZMIANA TUTAJ: Sortujemy listę wydatków dla konkretnej kategorii dopiero przed jej wylistowaniem.
+        val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
         val total = expenses.sumOf { it.amount.toDouble() }.toFloat()
 
         holder.tvCategoryName.text = category.displayName
-        // ZMIANA: Formatowanie sumy kategorii do 2 miejsc po przecinku
         holder.tvCategoryTotal.text = String.format("%.2f zł", total)
 
         // --- 1. STYL KARTY Z JETPACK COMPOSE (Material 3) ---
@@ -197,7 +192,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             }
 
             val tvAmount = TextView(holder.itemView.context).apply {
-                // ZMIANA: Formatowanie pojedynczego wydatku do 2 miejsc po przecinku
                 text = String.format("- %.2f zł", expense.amount)
                 setTextColor(Color.GRAY)
             }
