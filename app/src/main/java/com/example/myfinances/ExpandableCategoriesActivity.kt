@@ -5,14 +5,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,23 +36,22 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.filled.DirectionsCar // Auto
-import androidx.compose.material.icons.filled.List          // Inne
-import androidx.compose.material.icons.filled.MusicNote     // Nutka
-import androidx.compose.material.icons.filled.ReceiptLong   // Rachunek/Lista
-import androidx.compose.material.icons.filled.ShoppingCart  // Jedzenie
+import java.time.YearMonth
 
 class ExpandableCategoriesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Odbieramy wybrany miesiąc z Intencji (jeśli został przekazany)
+        val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
+
         setContent {
             MyFinancesTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ExpandableCategoriesScreen()
+                    ExpandableCategoriesScreen(selectedMonthStr = selectedMonthStr)
                 }
             }
         }
@@ -55,13 +59,15 @@ class ExpandableCategoriesActivity : ComponentActivity() {
 }
 
 @Composable
-fun ExpandableCategoriesScreen() {
+fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
     var groupedExpenses by remember {mutableStateOf<Map<ExpenseCategory, List<Expense>>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    // DODANO: Globalny stan przechowujący nazwy rozwiniętych kategorii.
-    // Używamy List<String>, które rememberSaveable potrafi bez problemu zapisać w Bundle.
     var expandedCategoryNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
+
+    // Konwersja odebranego Stringa (np. "2026-11") na obiekt YearMonth
+    val targetMonth = remember(selectedMonthStr) {
+        selectedMonthStr?.let { YearMonth.parse(it) }
+    }
 
     DisposableEffect(Unit) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
@@ -81,7 +87,12 @@ fun ExpandableCategoriesScreen() {
                     val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
                     val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
-                    fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                    val expenseDate = LocalDate.parse(dateStr)
+
+                    // FILTROWANIE WYDATKÓW Z DANEGO MIESIĄCA
+                    if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
+                        fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
+                    }
                 }
 
                 groupedExpenses = fetchedExpenses.groupBy { it.category }
@@ -118,15 +129,15 @@ fun ExpandableCategoriesScreen() {
                 items = sortedCategories,
                 key = { category -> category.name }
             ) { category ->
-                // ZMIANA: Sortowanie wydatków po dacie malejąco (od najnowszego do najstarszego)
+                // Sortowanie wydatków po dacie malejąco (od najnowszego do najstarszego)
                 val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
                 val isExpanded = expandedCategoryNames.contains(category.name)
 
                 ExpandableCategoryCard(
                     category = category,
                     expenses = expenses,
-                    isExpanded = isExpanded, // DODANO: Przekazanie stanu
-                    onExpandChange = { expanded -> // DODANO: Obsługa kliknięcia
+                    isExpanded = isExpanded,
+                    onExpandChange = { expanded ->
                         expandedCategoryNames = if (expanded) {
                             expandedCategoryNames + category.name
                         } else {
@@ -143,10 +154,9 @@ fun ExpandableCategoriesScreen() {
 fun ExpandableCategoryCard(
     category: ExpenseCategory,
     expenses: List<Expense>,
-    isExpanded: Boolean, // DODANO: Otrzymuje stan z zewnątrz
-    onExpandChange: (Boolean) -> Unit // DODANO: Przekazuje zmianę wyżej
+    isExpanded: Boolean,
+    onExpandChange: (Boolean) -> Unit
 ) {
-    // USUNIĘTO: var expanded by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     val totalSum = remember(expenses) {
@@ -169,7 +179,7 @@ fun ExpandableCategoryCard(
                         interactionSource = interactionSource,
                         indication = null
                     ) {
-                        onExpandChange(!isExpanded) // ZMIANA: Wywołanie funkcji zwrotnej
+                        onExpandChange(!isExpanded)
                     }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -201,13 +211,13 @@ fun ExpandableCategoryCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, // ZMIANA: Użycie isExpanded
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = "Rozwiń/Zwiń"
                     )
                 }
             }
 
-            if (isExpanded) { // ZMIANA: Użycie isExpanded
+            if (isExpanded) {
                 Divider()
                 Column(
                     modifier = Modifier

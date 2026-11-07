@@ -1,8 +1,5 @@
 package com.example.myfinances
 
-import android.content.Intent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
@@ -15,10 +12,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -134,10 +129,14 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
                 androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
             }
         ) {
+// fragment kodu w NavHost w MainScreenHost:
             composable(Screen.Chart.route) {
                 ExpensesScreen(expensesList = expensesList, isLoading = isLoading)
             }
-            composable(Screen.Categories.route) { CategoriesLauncherScreen() }
+            composable(Screen.Categories.route) {
+                // DODANE PARAMETRY:
+                MonthlyChartScreen(expensesList = expensesList, isLoading = isLoading)
+            }
         }
     }
 }
