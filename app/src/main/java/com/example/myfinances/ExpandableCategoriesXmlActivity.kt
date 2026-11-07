@@ -25,11 +25,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.time.LocalDate
+import java.time.YearMonth // Wymagany import dla filtrowania
 
 class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
+
+    // 1. Dodane pole klasy
+    private var targetMonth: YearMonth? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +42,10 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         progressBar = findViewById(R.id.progressBar)
         recyclerView.layoutManager = LinearLayoutManager(this)
+
+        // 2. Odczyt Intentu z wybranym miesiącem
+        val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
+        targetMonth = selectedMonthStr?.let { YearMonth.parse(it) }
 
         loadData()
     }
@@ -54,26 +62,28 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
-                    val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
+                    val id = child.key ?: ""
                     val name = child.child("name").getValue(String::class.java) ?: ""
                     val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                     val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
                     val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
-                    fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                    val expenseDate = LocalDate.parse(dateStr)
+
+                    // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
+                    if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
+                        fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
+                    }
                 }
 
-                // ZMIANA TUTAJ: Zgodnie z najlepszymi praktykami, najpierw tylko grupujemy całą listę.
                 val grouped = fetchedExpenses.groupBy { it.category }
 
                 progressBar.visibility = View.GONE
                 recyclerView.visibility = View.VISIBLE
                 val currentAdapter = recyclerView.adapter as? CategoryExpandableAdapter
                 if (currentAdapter == null) {
-                    // Pierwsze załadowanie - tworzymy adapter
                     recyclerView.adapter = CategoryExpandableAdapter(grouped)
                 } else {
-                    // Aktualizacja danych (np. po powrocie z edycji) - stan się zachowa
                     currentAdapter.updateData(grouped)
                 }
             }
@@ -88,14 +98,11 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
-    // Sztywny szyk kategorii ustalony w liście
     private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
 
-    // Funkcja pomocnicza sortująca zbiór kluczy
     private fun sortCategories(keys: Set<ExpenseCategory>): List<ExpenseCategory> {
         return keys.sortedBy { category ->
             val index = categoryOrder.indexOf(category.name)
-            // Jeśli kategorii nie ma na liście, ląduje na samym końcu
             if (index == -1) Int.MAX_VALUE else index
         }
     }
@@ -106,9 +113,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
     fun updateData(newGroupedExpenses: Map<ExpenseCategory, List<Expense>>) {
         this.groupedExpenses = newGroupedExpenses
         this.categories = sortCategories(newGroupedExpenses.keys)
-
-        // Zabezpieczenie: usunięcie ze stanu rozwinięcia kategorii,
-        // które zostały całkowicie usunięte z bazy
         expandedCategories.retainAll(categories.toSet())
         notifyDataSetChanged()
     }
@@ -137,14 +141,12 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
 
-        // ZMIANA TUTAJ: Sortujemy listę wydatków dla konkretnej kategorii dopiero przed jej wylistowaniem.
         val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
         val total = expenses.sumOf { it.amount.toDouble() }.toFloat()
 
         holder.tvCategoryName.text = category.displayName
         holder.tvCategoryTotal.text = String.format("%.2f zł", total)
 
-        // --- 1. STYL KARTY Z JETPACK COMPOSE (Material 3) ---
         val baseColor = category.color.toArgb()
         val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, 38)
 
@@ -214,7 +216,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             holder.expandableContent.addView(row)
         }
 
-        // --- 2. NAPRAWIONA ANIMACJA ROZWIJANIA Z FADE-IN / FADE-OUT ---
         val isExpanded = expandedCategories.contains(category)
 
         holder.expandableContent.visibility = if (isExpanded) View.VISIBLE else View.GONE

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center_horizontal"
+    android:background="@android:color/white">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Wydatki z 6 miesięcy"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/black"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- Przełącznik typów wykresu -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/toggle_background"
+        android:padding="4dp"
+        android:layout_marginBottom="32dp">
+
+        <TextView
+            android:id="@+id/tvToggleBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Kolumnowy"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:background="@drawable/toggle_selected"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/tvToggleLine"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Liniowy"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:background="@android:color/transparent"
+            android:textColor="#555555"
+            android:textStyle="bold"/>
+    </LinearLayout>
+
+    <!-- Customowy Widok Wykresu -->
+    <com.example.myfinances.MonthsChartView
+        android:id="@+id/chartView"
+        android:layout_width="match_parent"
+        android:layout_height="320dp" />
+
+</LinearLayout>
