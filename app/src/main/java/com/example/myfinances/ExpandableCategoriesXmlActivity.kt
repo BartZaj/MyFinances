@@ -1,5 +1,6 @@
 package com.example.myfinances
 
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -25,14 +26,13 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.time.LocalDate
-import java.time.YearMonth // Wymagany import dla filtrowania
+import java.time.YearMonth
 
 class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
 
-    // 1. Dodane pole klasy
     private var targetMonth: YearMonth? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,7 +43,6 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
-        // 2. Odczyt Intentu z wybranym miesiącem
         val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
         targetMonth = selectedMonthStr?.let { YearMonth.parse(it) }
 
@@ -118,7 +117,9 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val cardLayout: LinearLayout = view.findViewById(R.id.cardLayout)
         val headerLayout: RelativeLayout = view.findViewById(R.id.headerLayout)
+        val iconCircleBackground: View = view.findViewById(R.id.iconCircleBackground)
         val iconIndicator: ImageView = view.findViewById(R.id.iconIndicator)
         val tvCategoryName: TextView = view.findViewById(R.id.tvCategoryName)
         val tvCategoryTotal: TextView = view.findViewById(R.id.tvCategoryTotal)
@@ -140,7 +141,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
-
         val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
         val total = expenses.sumOf { it.amount.toDouble() }.toFloat()
 
@@ -148,24 +148,40 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
         holder.tvCategoryTotal.text = String.format("%.2f zł", total)
 
         val baseColor = category.color.toArgb()
-        val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, 38)
+        val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, (255 * 0.18).toInt())
 
+        // Główny kontener – zaokrąglone tło z przezroczystością (0.18 alpha)
         val cardShape = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = 48f
+            cornerRadius = 64f // Mocne zaokrąglenie, by imitowało 24.dp
             setColor(composeLikeBackgroundColor)
         }
+        holder.cardLayout.background = cardShape
 
-        holder.itemView.background = cardShape
-        holder.itemView.setPadding(30, 30, 30, 30)
+        // Kółko z ikoną (pełen kolor)
+        val circleShape = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(baseColor)
+        }
+        holder.iconCircleBackground.background = circleShape
 
-        val iconRes = when(category.name) {
+        // Teksty i strzałka również w pełnym kolorze
+        holder.tvCategoryName.setTextColor(baseColor)
+        holder.tvCategoryTotal.setTextColor(baseColor)
+        holder.ivArrow.setColorFilter(baseColor)
+
+        // Linia separatora o nieco ciemniejszej alfie koloru bazowego
+
+        val iconRes = when (category.name) {
             "FOOD" -> R.drawable.baseline_directions_car_24
             "TRANSPORT" -> R.drawable.baseline_directions_car_24
             "ENTERTAINMENT" -> R.drawable.baseline_directions_car_24
+            "BILLS" -> R.drawable.baseline_directions_car_24
             else -> R.drawable.baseline_directions_car_24
         }
         holder.iconIndicator.setImageResource(iconRes)
+        // Ikona jest biała (w kółku)
+        holder.iconIndicator.setColorFilter(Color.WHITE)
 
         holder.expandableContent.removeAllViews()
 
@@ -173,11 +189,12 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             val row = LinearLayout(holder.itemView.context).apply {
                 id = View.generateViewId()
                 orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 25, 0, 25)
+                    setMargins(0, 10, 0, 10)
                 }
 
                 val outValue = TypedValue()
@@ -187,18 +204,54 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                 isFocusable = true
             }
 
-            val tvName = TextView(holder.itemView.context).apply {
-                text = expense.name
-                setTextColor(android.graphics.Color.DKGRAY)
+            // Zawijacz na kolorową kropeczkę obok nazwy wydatku
+            val leftLayout = LinearLayout(holder.itemView.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
 
-            val tvAmount = TextView(holder.itemView.context).apply {
-                text = String.format("- %.2f zł", expense.amount)
-                setTextColor(Color.GRAY)
+            val expenseDot = View(holder.itemView.context).apply {
+                layoutParams = LinearLayout.LayoutParams(24, 24).apply {
+                    setMargins(0, 0, 32, 0) // Odstęp w prawo
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(baseColor)
+                }
             }
 
-            row.addView(tvName)
+            // Kolumna dla nazwy i daty
+            val textCol = LinearLayout(holder.itemView.context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+
+            val tvName = TextView(holder.itemView.context).apply {
+                text = expense.name
+                setTextColor(Color.DKGRAY)
+                textSize = 16f
+            }
+
+            val tvDate = TextView(holder.itemView.context).apply {
+                text = expense.date.toString()
+                setTextColor(Color.GRAY)
+                textSize = 12f
+            }
+
+            textCol.addView(tvName)
+            textCol.addView(tvDate)
+
+            leftLayout.addView(expenseDot)
+            leftLayout.addView(textCol)
+
+            val tvAmount = TextView(holder.itemView.context).apply {
+                text = String.format("- %.2f zł", expense.amount)
+                setTextColor(baseColor)
+                textSize = 16f
+            }
+
+            row.addView(leftLayout)
             row.addView(tvAmount)
 
             row.setOnClickListener {
