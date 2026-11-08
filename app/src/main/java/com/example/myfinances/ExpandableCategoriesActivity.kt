@@ -5,11 +5,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -18,11 +20,13 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -89,7 +93,7 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
 
                     val expenseDate = LocalDate.parse(dateStr)
 
-                    // FILTROWANIE WYDATKÓW Z DANEGO MIESIĄCA
+                    // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
                     if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
                         fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
                     }
@@ -165,86 +169,120 @@ fun ExpandableCategoryCard(
 
     val interactionSource = remember { MutableInteractionSource() }
 
-    Card(
+    val baseColor = Color(category.color.toArgb())
+    val backgroundColor = baseColor.copy(alpha = 0.18f)
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(backgroundColor)
+            .animateContentSize()
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) {
-                        onExpandChange(!isExpanded)
-                    }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val categoryIcon = when(category.name) {
-                        "FOOD" -> Icons.Default.ShoppingCart
-                        "TRANSPORT" -> Icons.Default.DirectionsCar
-                        "ENTERTAINMENT" -> Icons.Default.MusicNote
-                        "BILLS" -> Icons.Default.ReceiptLong
-                        else -> Icons.Default.List
-                    }
+        // Nagłówek
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) {
+                    onExpandChange(!isExpanded)
+                }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val categoryIcon = when (category.name) {
+                    "FOOD" -> Icons.Default.ShoppingCart
+                    "TRANSPORT" -> Icons.Default.DirectionsCar
+                    "ENTERTAINMENT" -> Icons.Default.MusicNote
+                    "BILLS" -> Icons.Default.ReceiptLong
+                    else -> Icons.Default.List
+                }
 
+                // Kolorowe kółko z białą ikoną
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(baseColor),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = categoryIcon,
                         contentDescription = category.displayName,
-                        modifier = Modifier.size(28.dp),
-                        tint = Color(category.color.toArgb())
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(text = category.displayName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = String.format("%.2f zł", totalSum),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Rozwiń/Zwiń"
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.White
                     )
                 }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = category.displayName,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = baseColor
+                )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = String.format("%.2f zł", totalSum),
+                    fontWeight = FontWeight.Bold,
+                    color = baseColor
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Rozwiń/Zwiń",
+                    tint = baseColor
+                )
+            }
+        }
 
-            if (isExpanded) {
-                Divider()
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    expenses.forEach { expense ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
-                                        putExtra("EXTRA_ID", expense.id)
-                                        putExtra("EXTRA_NAME", expense.name)
-                                        putExtra("EXTRA_AMOUNT", expense.amount)
-                                        putExtra("EXTRA_DATE", expense.date.toString())
-                                        putExtra("EXTRA_CATEGORY", expense.category.name)
-                                    }
-                                    context.startActivity(intent)
+        if (isExpanded) {
+            Divider(color = baseColor.copy(alpha = 0.4f))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                expenses.forEach { expense ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
+                                    putExtra("EXTRA_ID", expense.id)
+                                    putExtra("EXTRA_NAME", expense.name)
+                                    putExtra("EXTRA_AMOUNT", expense.amount)
+                                    putExtra("EXTRA_DATE", expense.date.toString())
+                                    putExtra("EXTRA_CATEGORY", expense.category.name)
                                 }
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = expense.name, color = Color.DarkGray)
-                            Text(text = String.format("- %.2f zł", expense.amount), color = Color.Gray)
+                                context.startActivity(intent)
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Kolorowa kropka przy nazwie wydatku
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(baseColor)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(text = expense.name, color = MaterialTheme.colorScheme.onSurface)
                         }
+                        Text(
+                            text = String.format("- %.2f zł", expense.amount),
+                            color = baseColor,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }

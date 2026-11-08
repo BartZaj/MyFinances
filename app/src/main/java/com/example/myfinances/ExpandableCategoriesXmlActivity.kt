@@ -177,7 +177,7 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 15, 0, 15)
+                    setMargins(0, 25, 0, 25)
                 }
 
                 val outValue = TypedValue()
