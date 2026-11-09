@@ -13,4 +13,10 @@
         android:id="@+id/nav_categories_launcher"
         android:name="com.example.myfinances.MonthlyChartFragment"
         android:label="Kategorie" />
+
+    <!-- NOWY EKRAN -->
+    <fragment
+        android:id="@+id/nav_expenses_list"
+        android:name="com.example.myfinances.ExpensesListFragment"
+        android:label="Lista" />
 </navigation>

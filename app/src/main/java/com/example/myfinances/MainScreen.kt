@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -29,6 +30,8 @@ import java.time.LocalDate
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Chart : Screen("chart", "Wykres", Icons.Filled.PieChart)
     object Categories : Screen("categories", "Kategorie", Icons.Filled.List)
+
+    object ExpensesList : Screen("expenses_list", "Lista", Icons.Filled.FormatListBulleted)
 }
 
  // Wymagane dla LocalRippleConfiguration
@@ -84,59 +87,58 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
      }
 
      Scaffold(
-// ... reszta kodu paska dolnego i NavHost pozostaje bez zmian ...
-        bottomBar = {
-            NavigationBar {
-                val items = listOf(Screen.Chart, Screen.Categories)
-                items.forEach { screen ->
-
-                    // Poprawne wyłączenie fali kliknięcia w Material 3
-                    CompositionLocalProvider(LocalRippleConfiguration provides null) {
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title) },
-                            selected = currentRoute == screen.route,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                    }
-
-                }
-            }
-        }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Chart.route,
-            modifier = Modifier.padding(innerPadding),
-            enterTransition = {
-                androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
-            },
-            exitTransition = {
-                androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
-            },
-            popEnterTransition = {
-                androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
-            },
-            popExitTransition = {
-                androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
-            }
-        ) {
-// fragment kodu w NavHost w MainScreenHost:
-            composable(Screen.Chart.route) {
-                ExpensesScreen(expensesList = expensesList, isLoading = isLoading)
-            }
-            composable(Screen.Categories.route) {
-                // DODANE PARAMETRY:
-                MonthlyChartScreen(expensesList = expensesList, isLoading = isLoading)
-            }
-        }
-    }
-}
+         bottomBar = {
+             NavigationBar {
+                 // 2. DODANIE NOWEGO EKRANU DO LISTY W DOLNYM MENU
+                 val items = listOf(Screen.Chart, Screen.Categories, Screen.ExpensesList)
+                 items.forEach { screen ->
+                     CompositionLocalProvider(LocalRippleConfiguration provides null) {
+                         NavigationBarItem(
+                             icon = { Icon(screen.icon, contentDescription = screen.title) },
+                             label = { Text(screen.title) },
+                             selected = currentRoute == screen.route,
+                             onClick = {
+                                 navController.navigate(screen.route) {
+                                     popUpTo(navController.graph.findStartDestination().id) {
+                                         saveState = true
+                                     }
+                                     launchSingleTop = true
+                                     restoreState = true
+                                 }
+                             }
+                         )
+                     }
+                 }
+             }
+         }
+     ) { innerPadding ->
+         NavHost(
+             navController = navController,
+             startDestination = Screen.Chart.route,
+             modifier = Modifier.padding(innerPadding),
+             enterTransition = {
+                 androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+             },
+             exitTransition = {
+                 androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+             },
+             popEnterTransition = {
+                 androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+             },
+             popExitTransition = {
+                 androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+             }
+         ) {
+             composable(Screen.Chart.route) {
+                 ExpensesScreen(expensesList = expensesList, isLoading = isLoading)
+             }
+             composable(Screen.Categories.route) {
+                 MonthlyChartScreen(expensesList = expensesList, isLoading = isLoading)
+             }
+             // 3. DODANY NOWY WIDOK W NAVHOST
+             composable(Screen.ExpensesList.route) {
+                 ExpensesListScreen(expensesList = expensesList, isLoading = isLoading)
+             }
+         }
+     }
+ }
