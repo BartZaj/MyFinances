@@ -130,7 +130,7 @@ class ExpensesChartFragment : Fragment() {
                     etDate.setText(selectedDate.toString())
                 },
                 selectedDate.year,
-                selectedDate.monthValue - 1,
+                selectedDate.monthValue - 1, // poprawiona literówka z Twojego kodu
                 selectedDate.dayOfMonth
             ).show()
         }
@@ -147,41 +147,51 @@ class ExpensesChartFragment : Fragment() {
             }
         })
 
-        MaterialAlertDialogBuilder(requireContext())
+        // 1. Zbuduj i stwórz dialog, ustawiając akcję przycisku "Dodaj" na null
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle("Dodaj wydatek")
             .setView(dialogView)
-            .setPositiveButton("Dodaj") { _, _ ->
-                val name = etName.text.toString()
-                val amountText = etAmount.text.toString()
-                val finalAmount = amountText.toFloatOrNull() ?: 0f
-
-                val selectedCategoryName = spinnerCategory.text.toString()
-                val selectedCategory =
-                    categories.firstOrNull { it.displayName == selectedCategoryName }
-                        ?: ExpenseCategory.FOOD
-
-                if (name.isNotBlank() && finalAmount > 0) {
-                    val uid = FirebaseAuth.getInstance().currentUser?.uid
-                    if (uid != null) {
-                        val databaseRef =
-                            FirebaseDatabase.getInstance().getReference("Users").child(uid)
-                                .child("Expenses")
-                        val newExpenseRef = databaseRef.push()
-                        val expenseData = mapOf(
-                            "name" to name,
-                            "amount" to finalAmount,
-                            "date" to selectedDate.toString(),
-                            "category" to selectedCategory.name
-                        )
-                        newExpenseRef.setValue(expenseData)
-                    }
-                } else {
-                    Toast.makeText(requireContext(), "Wprowadź poprawne dane", Toast.LENGTH_SHORT)
-                        .show()
-                }
-            }
+            .setPositiveButton("Dodaj", null) // <-- Ważne: null zamiast nawiasów {}
             .setNegativeButton("Wyjdź", null)
-            .show()
+            .create()
+
+        // 2. Pokaż dialog na ekranie
+        dialog.show()
+
+        // 3. Pobierz przycisk "Dodaj" i nadpisz jego zdarzenie kliknięcia
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val name = etName.text.toString()
+            val amountText = etAmount.text.toString()
+            val finalAmount = amountText.toFloatOrNull() ?: 0f
+
+            val selectedCategoryName = spinnerCategory.text.toString()
+            val selectedCategory =
+                categories.firstOrNull { it.displayName == selectedCategoryName }
+                    ?: ExpenseCategory.FOOD
+
+            // Walidacja
+            if (name.isNotBlank() && finalAmount > 0) {
+                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                if (uid != null) {
+                    val databaseRef =
+                        FirebaseDatabase.getInstance().getReference("Users").child(uid)
+                            .child("Expenses")
+                    val newExpenseRef = databaseRef.push()
+                    val expenseData = mapOf(
+                        "name" to name,
+                        "amount" to finalAmount,
+                        "date" to selectedDate.toString(),
+                        "category" to selectedCategory.name
+                    )
+                    newExpenseRef.setValue(expenseData)
+                }
+                // Zamykamy dialog tylko, gdy dane są poprawne
+                dialog.dismiss()
+            } else {
+                // Dane są niepoprawne – pokazujemy błąd i NIE zamykamy dialogu (brak dialog.dismiss())
+                Toast.makeText(requireContext(), "Wprowadź poprawne dane", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun drawChart(expenses: List<Expense>) {

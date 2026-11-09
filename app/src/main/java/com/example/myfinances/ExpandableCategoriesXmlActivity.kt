@@ -141,7 +141,10 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
-        val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
+        val expenses = groupedExpenses[category]?.sortedWith(
+            compareByDescending<Expense> { it.date }
+                .thenByDescending { it.id }
+        ) ?: emptyList()
         val total = expenses.sumOf { it.amount.toDouble() }.toFloat()
 
         holder.tvCategoryName.text = category.displayName
@@ -194,7 +197,7 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 10, 0, 10)
+                    setMargins(0, 20, 0, 20)
                 }
 
                 val outValue = TypedValue()

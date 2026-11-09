@@ -53,7 +53,7 @@ class ExpandableCategoriesActivity : ComponentActivity() {
             MyFinancesTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color.White
                 ) {
                     ExpandableCategoriesScreen(selectedMonthStr = selectedMonthStr)
                 }
@@ -92,7 +92,6 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
                     val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
                     val expenseDate = LocalDate.parse(dateStr)
-
                     // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
                     if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
                         fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
@@ -134,7 +133,10 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
                 key = { category -> category.name }
             ) { category ->
                 // Sortowanie wydatków po dacie malejąco (od najnowszego do najstarszego)
-                val expenses = groupedExpenses[category]?.sortedByDescending { it.date } ?: emptyList()
+                val expenses = groupedExpenses[category]?.sortedWith(
+                    compareByDescending<Expense> { it.date }
+                        .thenByDescending { it.id }
+                ) ?: emptyList()
                 val isExpanded = expandedCategoryNames.contains(category.name)
 
                 ExpandableCategoryCard(
@@ -247,7 +249,7 @@ fun ExpandableCategoryCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 expenses.forEach { expense ->
                     Row(
@@ -276,12 +278,26 @@ fun ExpandableCategoryCard(
                                     .background(baseColor)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = expense.name, color = MaterialTheme.colorScheme.onSurface)
+
+                            // ZMIANA TUTAJ: Kolumna dla nazwy i daty (odpowiednik XML textCol z LinearLayout vertical)
+                            Column {
+                                Text(
+                                    text = expense.name,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    text = expense.date.toString(),
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                         Text(
                             text = String.format("- %.2f zł", expense.amount),
                             color = baseColor,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp
                         )
                     }
                 }
