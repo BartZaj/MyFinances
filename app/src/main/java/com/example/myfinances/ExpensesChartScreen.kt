@@ -37,6 +37,13 @@ import com.google.firebase.database.ValueEventListener
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShoppingCart
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -382,7 +389,7 @@ fun BarChartItem(
         ) {
             Spacer(
                 modifier = Modifier
-                    .width(44.dp)
+                    .width(40.dp)
                     .fillMaxHeight()
                     .drawBehind {
                         val barHeightPx = size.height * animatedFraction.coerceAtLeast(0.01f)
@@ -428,14 +435,25 @@ fun BarChartItem(
             modifier = Modifier
                 .height(xAxisLabelSpace)
                 .fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
-            Text(
-                text = category.displayName,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.DarkGray,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            val categoryIcon = when (category.name) {
+                "FOOD" -> Icons.Default.ShoppingCart
+                "TRANSPORT" -> Icons.Default.DirectionsCar
+                "ENTERTAINMENT" -> Icons.Default.MusicNote
+                "BILLS" -> Icons.Default.ReceiptLong
+                "CLOTHING" -> Icons.Default.Checkroom
+                "HEALTH" -> Icons.Default.MedicalServices
+                else -> Icons.Default.List
+            }
+
+            Icon(
+                imageVector = categoryIcon,
+                contentDescription = category.displayName,
+                tint = category.color, // Ikona w kolorze kategorii
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .size(24.dp)
             )
         }
     }

@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -116,7 +118,7 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
         }
     } else {
         val sortedCategories = remember(groupedExpenses) {
-            val order = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
+            val order = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "CLOTHING", "HEALTH", "OTHER")
             groupedExpenses.keys.sortedBy { category ->
                 val index = order.indexOf(category.name)
                 if (index == -1) Int.MAX_VALUE else index
@@ -200,6 +202,8 @@ fun ExpandableCategoryCard(
                     "FOOD" -> Icons.Default.ShoppingCart
                     "TRANSPORT" -> Icons.Default.DirectionsCar
                     "ENTERTAINMENT" -> Icons.Default.MusicNote
+                    "CLOTHING" -> Icons.Default.Checkroom // <--- NOWA
+                    "HEALTH" -> Icons.Default.MedicalServices
                     "BILLS" -> Icons.Default.ReceiptLong
                     else -> Icons.Default.List
                 }

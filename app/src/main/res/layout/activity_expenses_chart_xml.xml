@@ -30,38 +30,15 @@
             android:textSize="24sp"
             android:textStyle="bold"
             android:layout_marginTop="16dp"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="4dp"
             android:textColor="#000000"/>
 
-        <FrameLayout
+        <!-- Nasz nowy, dedykowany widok wykresu z rysowaniem na Canvas -->
+        <!-- Wysokość 400dp pozwala swobodnie zmieścić rosnące słupki, ikony i pochyłe napisy -->
+        <com.example.myfinances.CategoriesChartView
+            android:id="@+id/categoriesChartView"
             android:layout_width="match_parent"
-            android:layout_height="320dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginBottom="40dp"
-                android:orientation="vertical">
-
-                <include layout="@layout/item_grid_line" android:id="@+id/gridLine4" />
-                <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-                <include layout="@layout/item_grid_line" android:id="@+id/gridLine3" />
-                <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-                <include layout="@layout/item_grid_line" android:id="@+id/gridLine2" />
-                <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-                <include layout="@layout/item_grid_line" android:id="@+id/gridLine1" />
-                <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
-                <include layout="@layout/item_grid_line" android:id="@+id/gridLine0" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/barsContainer"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginLeft="40dp"
-                android:orientation="horizontal">
-            </LinearLayout>
-        </FrameLayout>
+            android:layout_height="340dp" />
 
     </LinearLayout>
 

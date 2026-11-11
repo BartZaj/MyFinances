@@ -97,7 +97,7 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
-    private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
+    private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "CLOTHING", "HEALTH", "OTHER")
 
     private fun sortCategories(keys: Set<ExpenseCategory>): List<ExpenseCategory> {
         return keys.sortedBy { category ->
@@ -179,6 +179,8 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             "FOOD" -> R.drawable.baseline_directions_car_24
             "TRANSPORT" -> R.drawable.baseline_directions_car_24
             "ENTERTAINMENT" -> R.drawable.baseline_directions_car_24
+            "CLOTHING" -> R.drawable.baseline_directions_car_24
+            "HEALTH" -> R.drawable.baseline_directions_car_24
             "BILLS" -> R.drawable.baseline_directions_car_24
             else -> R.drawable.baseline_directions_car_24
         }

@@ -1,26 +1,19 @@
 package com.example.myfinances
 
-import android.animation.ValueAnimator
 import android.app.DatePickerDialog
 import android.content.Intent
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Trace
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Log
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.TextView
 import android.widget.Toast
-import androidx.compose.ui.graphics.toArgb
 import androidx.fragment.app.Fragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
@@ -34,18 +27,15 @@ class ExpensesChartFragment : Fragment() {
 
     private lateinit var progressBar: ProgressBar
     private lateinit var contentLayout: LinearLayout
-    private lateinit var barsContainer: LinearLayout
+    private lateinit var categoriesChartView: CategoriesChartView
     private lateinit var fabAddExpense: ExtendedFloatingActionButton
-
-    private val animators = mutableListOf<ValueAnimator>()
-    private val categoryViews = mutableMapOf<ExpenseCategory, View>()
 
     private val dataListener: (List<Expense>) -> Unit = { allExpenses ->
         if (isAdded) {
             val currentMonth = LocalDate.now().monthValue
             val currentYear = LocalDate.now().year
 
-            // Filtrowanie tylko dla tego konkretnego widoku
+            // Filtrowanie tylko dla tego konkretnego widoku (obecny miesiąc)
             val currentMonthExpenses = allExpenses.filter {
                 it.date.monthValue == currentMonth && it.date.year == currentYear
             }
@@ -63,11 +53,19 @@ class ExpensesChartFragment : Fragment() {
 
         progressBar = view.findViewById(R.id.progressBar)
         contentLayout = view.findViewById(R.id.contentLayout)
-        barsContainer = view.findViewById(R.id.barsContainer)
+        categoriesChartView = view.findViewById(R.id.categoriesChartView)
         fabAddExpense = view.findViewById(R.id.fabAddExpense)
 
         fabAddExpense.setOnClickListener {
             showAddExpenseDialog()
+        }
+
+        // Obsługa kliknięcia w słupek kategorii
+        categoriesChartView.setOnCategoryClickListener { category ->
+            val intent = Intent(requireContext(), CategoryDetailsXmlActivity::class.java).apply {
+                putExtra("CATEGORY_NAME", category.name)
+            }
+            startActivity(intent)
         }
 
         Trace.endSection()
@@ -89,12 +87,6 @@ class ExpensesChartFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         (activity as? MainXmlActivity)?.removeDataListener(dataListener)
-
-        animators.forEach { it.cancel() }
-        animators.clear()
-
-        // DODAJ TĘ LINIJKĘ - czyści stare widoki przy wyjściu z fragmentu
-        categoryViews.clear()
     }
 
     private fun showAddExpenseDialog() {
@@ -130,7 +122,7 @@ class ExpensesChartFragment : Fragment() {
                     etDate.setText(selectedDate.toString())
                 },
                 selectedDate.year,
-                selectedDate.monthValue - 1, // poprawiona literówka z Twojego kodu
+                selectedDate.monthValue - 1,
                 selectedDate.dayOfMonth
             ).show()
         }
@@ -151,7 +143,7 @@ class ExpensesChartFragment : Fragment() {
         val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle("Dodaj wydatek")
             .setView(dialogView)
-            .setPositiveButton("Dodaj", null) // <-- Ważne: null zamiast nawiasów {}
+            .setPositiveButton("Dodaj", null)
             .setNegativeButton("Wyjdź", null)
             .create()
 
@@ -188,7 +180,7 @@ class ExpensesChartFragment : Fragment() {
                 // Zamykamy dialog tylko, gdy dane są poprawne
                 dialog.dismiss()
             } else {
-                // Dane są niepoprawne – pokazujemy błąd i NIE zamykamy dialogu (brak dialog.dismiss())
+                // Dane są niepoprawne – pokazujemy błąd i NIE zamykamy dialogu
                 Toast.makeText(requireContext(), "Wprowadź poprawne dane", Toast.LENGTH_SHORT).show()
             }
         }
@@ -198,116 +190,16 @@ class ExpensesChartFragment : Fragment() {
         progressBar.visibility = View.GONE
         contentLayout.visibility = View.VISIBLE
 
+        // 1. Grupujemy wydatki z obecnego miesiąca i sumujemy ich kwoty
         val categoryTotals = expenses.groupBy { it.category }
             .mapValues { entry -> entry.value.sumOf { it.amount.toDouble() }.toFloat() }
 
-        val maxTotal = categoryTotals.values.maxOrNull() ?: 0f
-        val yAxisMax = if (maxTotal > 0f) {
-            ((maxTotal / 100).toInt() + 1) * 100f
-        } else 100f
-        val stepValue = yAxisMax / 4
-
-        view?.findViewById<View>(R.id.gridLine4)?.findViewById<TextView>(R.id.tvYAxis)?.text =
-            "${(stepValue * 4).toInt()}"
-        view?.findViewById<View>(R.id.gridLine3)?.findViewById<TextView>(R.id.tvYAxis)?.text =
-            "${(stepValue * 3).toInt()}"
-        view?.findViewById<View>(R.id.gridLine2)?.findViewById<TextView>(R.id.tvYAxis)?.text =
-            "${(stepValue * 2).toInt()}"
-        view?.findViewById<View>(R.id.gridLine1)?.findViewById<TextView>(R.id.tvYAxis)?.text =
-            "${(stepValue * 1).toInt()}"
-        view?.findViewById<View>(R.id.gridLine0)?.findViewById<TextView>(R.id.tvYAxis)?.text = "0"
-
-        val displayMetrics = resources.displayMetrics
-        val cornerRadiusPx =
-            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, displayMetrics)
-
-        animators.forEach { it.cancel() }
-        animators.clear()
-
-        // 1. Tworzymy widoki słupków tylko jeśli jeszcze nie istnieją
-        if (categoryViews.isEmpty()) {
-            barsContainer.removeAllViews()
-
-            ExpenseCategory.values().forEach { category ->
-                val barView = LayoutInflater.from(requireContext())
-                    .inflate(R.layout.item_bar_chart, barsContainer, false)
-
-                val tvCategoryName = barView.findViewById<TextView>(R.id.tvCategoryName)
-                val viewBar = barView.findViewById<View>(R.id.viewBar)
-                val barContainer = barView.findViewById<LinearLayout>(R.id.barContainer)
-
-                tvCategoryName.text = category.displayName
-
-                // Ustawienie początkowej wagi (wysokości)
-                val barParams = viewBar.layoutParams as LinearLayout.LayoutParams
-                barParams.weight = 0.01f
-                viewBar.layoutParams = barParams
-
-                val backgroundShape = GradientDrawable()
-                backgroundShape.shape = GradientDrawable.RECTANGLE
-                backgroundShape.setColor(category.color.toArgb())
-                backgroundShape.cornerRadii = floatArrayOf(
-                    cornerRadiusPx, cornerRadiusPx,
-                    cornerRadiusPx, cornerRadiusPx,
-                    0f, 0f, 0f, 0f
-                )
-                viewBar.background = backgroundShape
-
-                barContainer.setOnClickListener {
-                    val intent =
-                        Intent(requireContext(), CategoryDetailsXmlActivity::class.java).apply {
-                            putExtra("CATEGORY_NAME", category.name)
-                        }
-                    startActivity(intent)
-                }
-
-                barsContainer.addView(barView)
-                categoryViews[category] = barView // Zapisujemy widok do pamięci
-            }
+        // 2. Mapujemy na format akceptowany przez nowy CategoriesChartView
+        val chartData = ExpenseCategory.values().map { category ->
+            Pair(category, categoryTotals[category] ?: 0f)
         }
 
-        // 2. Aktualizujemy wartości i animujemy od OBECNEJ wysokości
-        ExpenseCategory.values().forEach { category ->
-            val totalForCategory = categoryTotals[category] ?: 0f
-            val heightPercentage = if (yAxisMax > 0) totalForCategory / yAxisMax else 0f
-            val targetWeight = heightPercentage.coerceAtLeast(0.01f)
-
-            val barView = categoryViews[category] ?: return@forEach
-            val tvAmount = barView.findViewById<TextView>(R.id.tvAmount)
-            val viewBar = barView.findViewById<View>(R.id.viewBar)
-            val spacerTop = barView.findViewById<View>(R.id.spacerTop)
-
-            if (totalForCategory > 0) {
-                tvAmount.text = "${totalForCategory.toInt()} zł"
-            } else {
-                tvAmount.text = "" // Ukrywamy tekst jeśli wartość spadła do 0
-            }
-
-            val currentBarParams = viewBar.layoutParams as LinearLayout.LayoutParams
-            val currentWeight = currentBarParams.weight
-
-            // Animujemy tylko wtedy, gdy waga (wysokość) faktycznie uległa zmianie
-            if (currentWeight != targetWeight) {
-                val animator = ValueAnimator.ofFloat(currentWeight, targetWeight)
-                animator.duration = 1200
-                animator.startDelay = 100
-                animator.interpolator = DecelerateInterpolator()
-
-                animator.addUpdateListener { animation ->
-                    val currentAnimatedWeight = animation.animatedValue as Float
-                    val animatedBarParams = viewBar.layoutParams as LinearLayout.LayoutParams
-                    val animatedSpacerParams = spacerTop.layoutParams as LinearLayout.LayoutParams
-
-                    animatedBarParams.weight = currentAnimatedWeight
-                    animatedSpacerParams.weight = 1f - currentAnimatedWeight
-
-                    viewBar.layoutParams = animatedBarParams
-                    spacerTop.layoutParams = animatedSpacerParams
-                }
-
-                animators.add(animator)
-                animator.start()
-            }
-        }
+        // 3. Przekazujemy dane do narysowania (widok sam zajmie się osią, animacjami i ikonami)
+        categoriesChartView.setData(chartData)
     }
 }
