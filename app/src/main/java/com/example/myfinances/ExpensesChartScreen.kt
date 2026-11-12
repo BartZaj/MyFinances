@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,9 +53,9 @@ fun ExpensesScreen(
     isLoading: Boolean
 ) {
     DisposableEffect(Unit) {
-        android.os.Trace.beginSection("ComposeScreen_ExpensesChart")
+        Trace.beginSection("ComposeScreen_ExpensesChart")
         onDispose {
-            android.os.Trace.endSection()
+            Trace.endSection()
         }
     }
 
@@ -223,6 +224,7 @@ fun AddExpenseDialog(
 
     var showDatePicker by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    val interactionSource = remember { MutableInteractionSource() }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -283,7 +285,10 @@ fun AddExpenseDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDatePicker = true }
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) { showDatePicker = true }
                 ) {
                     OutlinedTextField(
                         value = selectedDate.toString(),

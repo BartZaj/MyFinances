@@ -1,28 +1,55 @@
 package com.example.myfinances
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+// Ikony kategorii (te same, co w ExpandableCategoriesActivity)
+private fun categoryIconFor(category: ExpenseCategory): ImageVector =
+    when (category.name) {
+        "FOOD" -> Icons.Default.ShoppingCart
+        "TRANSPORT" -> Icons.Default.DirectionsCar
+        "ENTERTAINMENT" -> Icons.Default.MusicNote
+        "CLOTHING" -> Icons.Default.Checkroom
+        "HEALTH" -> Icons.Default.MedicalServices
+        "BILLS" -> Icons.Default.ReceiptLong
+        else -> Icons.Default.List
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,24 +66,20 @@ fun ExpensesListScreen(
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
 
-    // Filtry kwot "Od - Do" (używamy String, aby poprawnie obsługiwać wpisywanie z klawiatury)
+    // Filtry kwot "Od - Do"
     var minAmountText by remember { mutableStateOf("") }
     var maxAmountText by remember { mutableStateOf("") }
 
     // 2. OPTYMALIZACJA PAMIĘCIOWA (Filtrowanie)
-    // Bezpieczne parsowanie kwot
     val minAmount = minAmountText.toFloatOrNull()
     val maxAmount = maxAmountText.toFloatOrNull()
 
-    // Ten blok wykona się tylko przy wpisywaniu/zmianie filtrów lub zmianie bazy,
-    // chroniąc pamięć przed alokacjami w trakcie scrollowania!
     val filteredList = remember(
         expensesList, selectedCategory, startDate, endDate, minAmount, maxAmount
     ) {
         expensesList.filter { expense ->
             val categoryMatch = selectedCategory == null || expense.category == selectedCategory
 
-            // isBefore i isAfter upewniają się, że krawędzie (ta sama data) też są wliczane
             val startDateMatch = startDate == null || !expense.date.isBefore(startDate)
             val endDateMatch = endDate == null || !expense.date.isAfter(endDate)
 
@@ -65,6 +88,11 @@ fun ExpensesListScreen(
 
             categoryMatch && startDateMatch && endDateMatch && minAmountMatch && maxAmountMatch
         }.sortedByDescending { it.date }
+    }
+
+    // Czysty stan listy (od pozycji 0) ZAWSZE, gdy zmieni się którykolwiek filtr.
+    val listState = remember(selectedCategory, startDate, endDate, minAmountText, maxAmountText) {
+        LazyListState()
     }
 
     Scaffold { paddingValues ->
@@ -91,21 +119,21 @@ fun ExpensesListScreen(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                 ) {
                     item {
-                        FilterChip(
-                            selected = selectedCategory == null,
-                            onClick = { selectedCategory = null },
-                            label = { Text("Wszystkie") }
+                        CategoryFilterChip(
+                            label = "Wszystkie",
+                            icon = Icons.Default.List,
+                            baseColor = Color.Gray,
+                            isSelected = selectedCategory == null,
+                            onClick = { selectedCategory = null }
                         )
                     }
                     items(ExpenseCategory.values()) { category ->
-                        FilterChip(
-                            selected = selectedCategory == category,
-                            onClick = { selectedCategory = category },
-                            label = { Text(category.displayName) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = category.color.copy(alpha = 0.2f),
-                                selectedLabelColor = Color.Black
-                            )
+                        CategoryFilterChip(
+                            label = category.displayName,
+                            icon = categoryIconFor(category),
+                            baseColor = Color(category.color.toArgb()),
+                            isSelected = selectedCategory == category,
+                            onClick = { selectedCategory = category }
                         )
                     }
                 }
@@ -121,6 +149,7 @@ fun ExpensesListScreen(
                         label = { Text("Od kwoty (zł)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
@@ -129,6 +158,7 @@ fun ExpensesListScreen(
                         label = { Text("Do kwoty (zł)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -142,6 +172,7 @@ fun ExpensesListScreen(
                     OutlinedButton(
                         onClick = { showStartDatePicker = true },
                         modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
                         Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -151,6 +182,7 @@ fun ExpensesListScreen(
                             style = MaterialTheme.typography.bodySmall
                         )
                         if (startDate != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 imageVector = Icons.Filled.Clear,
                                 contentDescription = "Usuń",
@@ -163,6 +195,7 @@ fun ExpensesListScreen(
                     OutlinedButton(
                         onClick = { showEndDatePicker = true },
                         modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
                         Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -172,6 +205,7 @@ fun ExpensesListScreen(
                             style = MaterialTheme.typography.bodySmall
                         )
                         if (endDate != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 imageVector = Icons.Filled.Clear,
                                 contentDescription = "Usuń",
@@ -197,13 +231,14 @@ fun ExpensesListScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(
                         items = filteredList,
-                        key = { it.id } // Kluczowe dla wydajności przy scrollowaniu i zmianach filtrowania!
+                        key = { it.id }
                     ) { expense ->
                         ExpenseListItemCard(expense = expense)
                     }
@@ -256,51 +291,118 @@ fun ExpensesListScreen(
     }
 }
 
-// (Funkcja ExpenseListItemCard pozostaje bez zmian jak w poprzedniej wiadomości)
+// Chip kategorii w stylu ekranu kategorii (kółko z ikoną + kolorowe tło po zaznaczeniu)
 @Composable
-fun ExpenseListItemCard(expense: Expense) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp)
+private fun CategoryFilterChip(
+    label: String,
+    icon: ImageVector,
+    baseColor: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .border(
+                width = 1.dp,
+                color = if (isSelected) Color.Transparent else Color.LightGray,
+                shape = shape
+            )
+            .background(
+                color = if (isSelected) baseColor.copy(alpha = 0.18f) else Color.Transparent,
+                shape = shape
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null, // Brak efektu fali
+                onClick = onClick
+            )
+            .padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) baseColor else baseColor.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .background(expense.category.color, shape = androidx.compose.foundation.shape.CircleShape)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = expense.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = expense.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                }
-            }
-
-            Text(
-                text = "${expense.amount.toInt()} zł",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(16.dp),
+                tint = Color.White
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = label,
+            color = if (isSelected) baseColor else Color.Gray,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+// Karta wydatku w stylu ExpandableCategoryCard
+@Composable
+fun ExpenseListItemCard(expense: Expense) {
+    val baseColor = Color(expense.category.color.toArgb())
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(baseColor.copy(alpha = 0.18f))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Kolorowe kółko z białą ikoną
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(baseColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = categoryIconFor(expense.category),
+                    contentDescription = expense.category.displayName,
+                    modifier = Modifier.size(24.dp),
+                    tint = Color.White
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = expense.name,
+                    color = baseColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = expense.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = String.format("- %.2f zł", expense.amount),
+            color = baseColor,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        )
     }
 }

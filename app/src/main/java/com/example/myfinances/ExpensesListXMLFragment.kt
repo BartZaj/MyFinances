@@ -13,11 +13,16 @@ import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.chip.Chip
-import com.google.android.material.chip.ChipGroup
 import com.google.android.material.textfield.TextInputEditText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
+import android.widget.ImageView
+import android.widget.LinearLayout
 
 class ExpensesListFragment : Fragment() {
 
@@ -26,7 +31,8 @@ class ExpensesListFragment : Fragment() {
     private lateinit var tvEmptyState: TextView
     private lateinit var contentLayout: View
 
-    private lateinit var chipGroupCategories: ChipGroup
+    private lateinit var llCategories: LinearLayout
+    private val categoryViews = mutableMapOf<ExpenseCategory, View>()
     private lateinit var etMinAmount: TextInputEditText
     private lateinit var etMaxAmount: TextInputEditText
     private lateinit var btnStartDate: Button
@@ -52,7 +58,8 @@ class ExpensesListFragment : Fragment() {
             allExpenses = expenses
             progressBar.visibility = View.GONE
             contentLayout.visibility = View.VISIBLE
-            applyFiltersAndRender() // Odśwież widok, gdy przyjda nowe dane z bazy
+            // Baza przesyła nowe dane -> filtrujemy i renderujemy, ale NIE scrollujemy
+            applyFiltersAndRender(scrollToTop = false)
         }
     }
 
@@ -67,7 +74,7 @@ class ExpensesListFragment : Fragment() {
         progressBar = view.findViewById(R.id.progressBar)
         tvEmptyState = view.findViewById(R.id.tvEmptyState)
         contentLayout = view.findViewById(R.id.contentLayout)
-        chipGroupCategories = view.findViewById(R.id.chipGroupCategories)
+        llCategories = view.findViewById(R.id.llCategories)
         etMinAmount = view.findViewById(R.id.etMinAmount)
         etMaxAmount = view.findViewById(R.id.etMaxAmount)
         btnStartDate = view.findViewById(R.id.btnStartDate)
@@ -102,33 +109,33 @@ class ExpensesListFragment : Fragment() {
 
     private fun setupFilters() {
         // A. KATEGORIE
-        // Używamy .entries zamiast .values() aby pozbyć się ostrzeżenia z IDE
+        val layoutInflater = LayoutInflater.from(requireContext())
         ExpenseCategory.entries.forEach { category ->
-            // Bezpieczne tworzenie Chipa programowo
-            val chip = Chip(requireContext()).apply {
-                text = category.displayName
-                isCheckable = true
-                setOnCheckedChangeListener { _, isChecked ->
-                    if (isChecked) {
-                        selectedCategory = category
-                        applyFiltersAndRender()
-                    } else if (selectedCategory == category) {
-                        selectedCategory = null
-                        applyFiltersAndRender()
-                    }
-                }
-            }
-            chipGroupCategories.addView(chip)
-        }
+            val item = layoutInflater.inflate(R.layout.item_category_filter, llCategories, false)
+            item.findViewById<TextView>(R.id.tvCategoryName).text = category.displayName
+            item.findViewById<ImageView>(R.id.ivCategoryIcon)
+                .setImageResource(categoryIconRes(category))
 
-        // B. KWOTY (Używamy TextWatchera by reagować na wpisywanie z klawiatury)
+            item.setOnClickListener {
+                // Ponowne kliknięcie zaznaczonej kategorii ją odznacza
+                selectedCategory = if (selectedCategory == category) null else category
+                updateCategoryStyles()
+                applyFiltersAndRender(scrollToTop = true)
+            }
+
+            llCategories.addView(item)
+            categoryViews[category] = item
+        }
+        updateCategoryStyles()
+
+        // B. KWOTY
         val amountWatcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 minAmount = etMinAmount.text.toString().toFloatOrNull()
                 maxAmount = etMaxAmount.text.toString().toFloatOrNull()
-                applyFiltersAndRender()
+                applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
             }
         }
         etMinAmount.addTextChangedListener(amountWatcher)
@@ -140,7 +147,7 @@ class ExpensesListFragment : Fragment() {
                 startDate = date
                 btnStartDate.text = date.format(dateFormatter)
                 tvClearStartDate.visibility = View.VISIBLE
-                applyFiltersAndRender()
+                applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
             }
         }
 
@@ -149,7 +156,7 @@ class ExpensesListFragment : Fragment() {
                 endDate = date
                 btnEndDate.text = date.format(dateFormatter)
                 tvClearEndDate.visibility = View.VISIBLE
-                applyFiltersAndRender()
+                applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
             }
         }
 
@@ -157,14 +164,14 @@ class ExpensesListFragment : Fragment() {
             startDate = null
             btnStartDate.text = "Od daty"
             tvClearStartDate.visibility = View.GONE
-            applyFiltersAndRender()
+            applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
         }
 
         tvClearEndDate.setOnClickListener {
             endDate = null
             btnEndDate.text = "Do daty"
             tvClearEndDate.visibility = View.GONE
-            applyFiltersAndRender()
+            applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
         }
     }
 
@@ -186,8 +193,8 @@ class ExpensesListFragment : Fragment() {
     // Ta metoda wykonuje przeliczenia (filtrowanie i sortowanie) TYLKO WTEDY,
     // kiedy zmienią się filtry (kliknięcie usera) lub gdy przyjdą nowe dane z bazy (logowanie).
     // Podczas "scrollowania palcem w dół" ta metoda całkowicie milczy.
-    private fun applyFiltersAndRender() {
-        // Przypisanie do niemutowalnych stałych lokalnych rozwiązuje błąd Smart Cast
+// Zmieniona sygnatura - domyślnie NIE scrolluje (przydatne przy aktualizacji z bazy)
+    private fun applyFiltersAndRender(scrollToTop: Boolean = false) {
         val currentSelectedCategory = selectedCategory
         val currentStartDate = startDate
         val currentEndDate = endDate
@@ -196,11 +203,8 @@ class ExpensesListFragment : Fragment() {
 
         val filteredList = allExpenses.filter { expense ->
             val categoryMatch = currentSelectedCategory == null || expense.category == currentSelectedCategory
-
-            // isBefore() i isAfter() pilnują krawędzi (np. wydatki z samego początku/końca zakresu)
             val startDateMatch = currentStartDate == null || !expense.date.isBefore(currentStartDate)
             val endDateMatch = currentEndDate == null || !expense.date.isAfter(currentEndDate)
-
             val minAmountMatch = currentMin == null || expense.amount >= currentMin
             val maxAmountMatch = currentMax == null || expense.amount <= currentMax
 
@@ -216,5 +220,36 @@ class ExpensesListFragment : Fragment() {
         }
 
         adapter.updateData(filteredList)
+
+        // DODANE: Sprawdza flagę, zanim przewinie na górę
+        if (scrollToTop && filteredList.isNotEmpty()) {
+            rvExpenses.scrollToPosition(0)
+        }
+    }
+
+    private fun dp(value: Int): Float = value * resources.displayMetrics.density
+
+    // Wygląd chipa jak w Composie: po zaznaczeniu kolorowe tło (alpha 0.18), pogrubiony tekst,
+    // przed zaznaczeniem szara ramka i szary tekst
+    // Wygląd jak Box w Composie: zaznaczona kategoria ma kolorowe tło (alpha 0.18),
+    // niezaznaczona szarą ramkę i szary tekst
+    private fun updateCategoryStyles() {
+        categoryViews.forEach { (category, item) ->
+            val isSelected = selectedCategory == category
+            val base = category.color.toArgb()
+
+            (item.background.mutate() as GradientDrawable).apply {
+                setColor(if (isSelected) ColorUtils.setAlphaComponent(base, 46) else Color.TRANSPARENT)
+                setStroke(dp(1).toInt(), if (isSelected) Color.TRANSPARENT else Color.LTGRAY)
+            }
+
+            (item.findViewById<View>(R.id.flCategoryIcon).background.mutate() as GradientDrawable)
+                .setColor(if (isSelected) base else ColorUtils.setAlphaComponent(base, 128))
+
+            item.findViewById<TextView>(R.id.tvCategoryName).apply {
+                setTextColor(if (isSelected) base else Color.GRAY)
+                typeface = if (isSelected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            }
+        }
     }
 }
