@@ -17,8 +17,10 @@ class CategoriesChartView @JvmOverloads constructor(
 
     // Dane zasilające: Kategoria -> Kwota
     private var chartData = listOf<Pair<ExpenseCategory, Float>>()
-    // DODANO: Zapamiętywanie poprzedniego stanu do animowania tylko dodanego wydatku
+
+    // Zapamiętywanie poprzedniego stanu do animowania
     private var previousData = mapOf<ExpenseCategory, Float>()
+    private var previousYAxisMax = 100f // DODANO: Zapamiętywanie poprzedniej skali osi Y
 
     private var yAxisMax = 100f
     private var animationProgress = 0f
@@ -26,7 +28,7 @@ class CategoriesChartView @JvmOverloads constructor(
     private var onCategoryClickListener: ((ExpenseCategory) -> Unit)? = null
     private var animator: ValueAnimator? = null
 
-    // Pędzle graficzne (Paints) - USUNIĘTO textPaint dla nazw kategorii
+    // Pędzle graficzne (Paints)
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
@@ -47,24 +49,24 @@ class CategoriesChartView @JvmOverloads constructor(
         pathEffect = DashPathEffect(floatArrayOf(15f, 15f), 0f)
     }
 
-    // Wymiary przestrzenne (dopasowane do proporcji 7 kategorii)
-    // ZMNIEJSZONO xAxisSpace, ponieważ nie ma już pod spodem tekstu
+    // Wymiary przestrzenne
     private val xAxisSpace = 80f
     private val yAxisSpace = 130f
     private val topSpace = 80f
-    private val barWidth = 95f    // Słupki są cieńsze, by zmieścić 7 sztuk
-    private val iconSize = 60     // Rozmiar ikon na dole
+    private val barWidth = 95f
+    private val iconSize = 60
 
-    // Mapa z kolorowanymi ikonami dla optymalizacji
     private val categoryIconsCache = mutableMapOf<ExpenseCategory, Drawable>()
 
     fun setData(data: List<Pair<ExpenseCategory, Float>>) {
-        // Zapisujemy stary stan, żeby wiedzieć, który słupek ma urosnąć
+        // Zapisujemy stary stan, żeby wiedzieć, który słupek ma urosnąć i czy skala się zmienia
         previousData = this.chartData.toMap()
+        previousYAxisMax = this.yAxisMax
+
         this.chartData = data
         val maxTotal = chartData.maxOfOrNull { it.second } ?: 0f
 
-        // Dynamiczne wyliczanie siatki (kroki Y) - zapobieganie błędom matematycznym
+        // Dynamiczne wyliczanie siatki (kroki Y)
         yAxisMax = when {
             maxTotal >= 1000f -> ((maxTotal / 500).toInt() + 1) * 500f
             maxTotal > 0f -> ((maxTotal / 100).toInt() + 1) * 100f
@@ -143,14 +145,16 @@ class CategoriesChartView @JvmOverloads constructor(
             val (category, total) = pair
             val oldTotal = previousData[category] ?: 0f
 
-            // DODANO: Wyliczamy aktualną wysokość rosnącego słupka od starej do nowej wartości
-            val currentTotal = oldTotal + (total - oldTotal) * animationProgress
+            // PŁYNNA INTERPOLACJA WYSOKOŚCI (efekt z Compose)
+            val oldHeightPercent = if (previousYAxisMax > 0) oldTotal / previousYAxisMax else 0f
+            val newHeightPercent = if (yAxisMax > 0) total / yAxisMax else 0f
+
+            // Animacja przechodzi płynnie ze starego ułamka wysokości na nowy ułamek wysokości
+            val currentHeightPercent = oldHeightPercent + (newHeightPercent - oldHeightPercent) * animationProgress
 
             val xCenter = yAxisSpace + (index * columnWidth) + (columnWidth / 2)
-            val heightPercent = if (yAxisMax > 0) currentTotal / yAxisMax else 0f
 
-            // Używamy currentTotal (wzrastającego) zamiast mnożyć przez animationProgress drugi raz
-            val currentHeight = drawingHeight * heightPercent.coerceAtLeast(0.01f)
+            val currentHeight = drawingHeight * currentHeightPercent.coerceAtLeast(0.01f)
             val topY = chartBottom - currentHeight
 
             barPaint.color = category.color.toArgb()
@@ -169,14 +173,14 @@ class CategoriesChartView @JvmOverloads constructor(
                 )
             }
 
-            // Animowane kwoty - wyświetla od razu wartość docelową (total), żeby liczby się nie zmieniały
+            // Kwoty - wyświetla od razu wartość docelową (total)
             if (total > 0) {
-                valueTextPaint.alpha = 255 // <--- Zawsze 100% widoczności
+                valueTextPaint.alpha = 255
                 canvas.drawText("${total.toInt()} zł", xCenter, topY - 15f, valueTextPaint)
             }
 
-            // Rysowanie Ikony wycentrowanej pod linią 0
-            val iconTop = chartBottom + 16f // Zmniejszono margines pod osią, żeby ikony były bliżej
+            // Rysowanie Ikony
+            val iconTop = chartBottom + 16f
             categoryIconsCache[category]?.let { icon ->
                 val halfIcon = iconSize / 2
                 icon.setBounds(
@@ -187,8 +191,6 @@ class CategoriesChartView @JvmOverloads constructor(
                 )
                 icon.draw(canvas)
             }
-
-            // USUNIĘTO blok rysujący pochyły tekst z nazwą kategorii
         }
     }
 
