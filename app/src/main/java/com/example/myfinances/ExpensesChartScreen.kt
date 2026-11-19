@@ -45,6 +45,14 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import android.widget.Toast
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,10 +70,39 @@ fun ExpensesScreen(
     val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // TUTAJ USUNIĘTO CAŁY BLOK DisposableEffect Z FIREBASE
+    // Stan limitów z Firebase oraz aktualnie edytowanej kategorii
+    var categoryLimits by remember { mutableStateOf(emptyMap<ExpenseCategory, Float>()) }
+    var editingCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
+
+    // Nasłuchiwanie gałęzi Users -> {uid} -> Limits
+    DisposableEffect(Unit) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid == null) {
+            return@DisposableEffect onDispose {}
+        }
+
+        val limitsRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Limits")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val fetched = mutableMapOf<ExpenseCategory, Float>()
+                for (child in snapshot.children) {
+                    val catName = child.key ?: continue
+                    val limitVal = child.getValue(Double::class.java)?.toFloat() ?: 0f
+                    try {
+                        fetched[ExpenseCategory.valueOf(catName)] = limitVal
+                    } catch (_: IllegalArgumentException) {
+                    }
+                }
+                categoryLimits = fetched
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        limitsRef.addValueEventListener(listener)
+        onDispose { limitsRef.removeEventListener(listener) }
+    }
 
     Scaffold(
-// ... reszta kodu widoku pozostaje bez zmian ...
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAddDialog = true },
@@ -81,32 +118,45 @@ fun ExpensesScreen(
                     CircularProgressIndicator(color = Color(0xFF74C69D))
                 }
             } else {
-                val categoryTotals = remember(expensesList) {
-                    expensesList.groupBy { it.category }
+                // Filtrowanie dla obecnego miesiąca (tak jak w XML)
+                val currentMonthExpenses = remember(expensesList) {
+                    val now = LocalDate.now()
+                    expensesList.filter {
+                        it.date.monthValue == now.monthValue && it.date.year == now.year
+                    }
+                }
+
+                val categoryTotals = remember(currentMonthExpenses) {
+                    currentMonthExpenses.groupBy { it.category }
                         .mapValues { entry ->
                             entry.value.sumOf { it.amount.toDouble() }.toFloat()
                         }
                 }
 
                 val maxTotal = categoryTotals.values.maxOrNull() ?: 0f
-                val yAxisMax = if (maxTotal > 0f) {
-                    ((maxTotal / 100).toInt() + 1) * 100f
-                } else 100f
+                val yAxisMax = when {
+                    maxTotal >= 1000f -> ((maxTotal / 500).toInt() + 1) * 500f
+                    maxTotal > 0f -> ((maxTotal / 100).toInt() + 1) * 100f
+                    else -> 100f
+                }
 
                 val stepCount = 4
                 val stepValue = yAxisMax / stepCount
+                val categories = remember { ExpenseCategory.values() }
+                val pagerState = rememberPagerState(pageCount = { categories.size })
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = "Podsumowanie Wydatków",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 32.dp, top = 16.dp)
+                        modifier = Modifier.padding(bottom = 32.dp, top = 8.dp)
                     )
 
                     val xAxisLabelSpace = 40.dp
@@ -161,7 +211,7 @@ fun ExpensesScreen(
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                ExpenseCategory.values().forEach { category ->
+                                categories.forEach { category ->
                                     val totalForCategory = categoryTotals[category] ?: 0f
                                     val heightPercentage = if (yAxisMax > 0) totalForCategory / yAxisMax else 0f
 
@@ -182,6 +232,37 @@ fun ExpensesScreen(
                                 }
                             }
                         }
+                    }
+
+                    // ==========================================
+                    // MIEJSCE NA 3 OSTATNIE TRANSAKCJE (W PRZYSZŁOŚCI)
+                    // ==========================================
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Sekcja limitów kategorii
+                    Text(
+                        text = "Limity kategorii (przesuń w bok)",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                    ) { page ->
+                        val category = categories[page]
+                        CategoryLimitCard(
+                            category = category,
+                            spent = categoryTotals[category] ?: 0f,
+                            limit = categoryLimits[category] ?: 0f,
+                            onEditClick = { editingCategory = category }
+                        )
                     }
                 }
             }
@@ -206,6 +287,32 @@ fun ExpensesScreen(
                 }
                 showAddDialog = false
             }
+        )
+    }
+
+    // Wyświetlanie BottomSheet – tutaj przełączasz między Wersją 1 a Wersją 2
+    editingCategory?.let { category ->
+        val currentLimit = categoryLimits[category] ?: 0f
+        val saveLimit: (Float) -> Unit = { newLimit ->
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid != null) {
+                FirebaseDatabase.getInstance()
+                    .getReference("Users")
+                    .child(uid)
+                    .child("Limits")
+                    .child(category.name)
+                    .setValue(newLimit.toDouble())
+            }
+            editingCategory = null
+        }
+
+        // WERSJA 2: Arkusz idzie w górę razem z klawiaturą (odkomentuj i zakomentuj Wersję 1, żeby przetestować)
+
+        EditLimitBottomSheetWithKeyboard(
+            category = category,
+            currentLimit = currentLimit,
+            onDismiss = { editingCategory = null },
+            onSave = saveLimit
         )
     }
 }
@@ -460,6 +567,167 @@ fun BarChartItem(
                     .padding(top = 8.dp)
                     .size(24.dp)
             )
+        }
+    }
+}
+@Composable
+fun CategoryLimitCard(
+    category: ExpenseCategory,
+    spent: Float,
+    limit: Float,
+    onEditClick: () -> Unit
+) {
+    val hasLimit = limit > 0f
+    val rawPercent = if (hasLimit) ((spent / limit) * 100).toInt() else 0
+    val targetProgress = if (hasLimit) (spent / limit).coerceIn(0f, 1f) else 0f
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = tween(durationMillis = 600),
+        label = "LimitProgressAnimation"
+    )
+
+    val indicatorColor = if (hasLimit && rawPercent > 100) {
+        Color(0xFFD32F2F)
+    } else {
+        category.color
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(4.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(100.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.size(96.dp),
+                    color = indicatorColor,
+                    strokeWidth = 10.dp,
+                    trackColor = Color(0xFFE0E0E0),
+                    strokeCap = StrokeCap.Round
+                )
+                Text(
+                    text = if (hasLimit) "$rawPercent%" else "—",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 16.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = category.displayName,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Text(
+                    text = if (hasLimit) {
+                        "Wydano: ${spent.toInt()} zł / ${limit.toInt()} zł"
+                    } else {
+                        "Wydano: ${spent.toInt()} zł / Brak limitu"
+                    },
+                    fontSize = 14.sp,
+                    color = Color(0xFF555555),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                )
+                FilledTonalButton(onClick = onEditClick) {
+                    Text("Edytuj limit")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditLimitBottomSheetWithKeyboard(
+    category: ExpenseCategory,
+    currentLimit: Float,
+    onDismiss: () -> Unit,
+    onSave: (Float) -> Unit
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var limitText by remember(category, currentLimit) {
+        mutableStateOf(if (currentLimit > 0f) currentLimit.toInt().toString() else "")
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = "Limit: ${category.displayName}",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            OutlinedTextField(
+                value = limitText,
+                onValueChange = { newValue ->
+                    if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                        limitText = newValue
+                    }
+                },
+                label = { Text("Miesięczny limit (zł)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text("Anuluj")
+                }
+                Button(
+                    onClick = {
+                        val parsed = limitText.toFloatOrNull()
+                        if (parsed != null && parsed >= 0f) {
+                            onSave(parsed)
+                        } else {
+                            Toast.makeText(context, "Wprowadź poprawną kwotę", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Zapisz")
+                }
+            }
         }
     }
 }
