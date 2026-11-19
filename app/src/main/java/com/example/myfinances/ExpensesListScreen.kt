@@ -6,9 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,32 +57,34 @@ fun ExpensesListScreen(
     expensesList: List<Expense>,
     isLoading: Boolean
 ) {
-    // 1. STANY FILTRÓW
+    // 1. ZATWIERDZONE STANY FILTRÓW
     var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
-
-    // Filtry dat "Od - Do"
     var startDate by remember { mutableStateOf<LocalDate?>(null) }
     var endDate by remember { mutableStateOf<LocalDate?>(null) }
-    var showStartDatePicker by remember { mutableStateOf(false) }
-    var showEndDatePicker by remember { mutableStateOf(false) }
-
-    // Filtry kwot "Od - Do"
     var minAmountText by remember { mutableStateOf("") }
     var maxAmountText by remember { mutableStateOf("") }
 
-    // 2. OPTYMALIZACJA PAMIĘCIOWA (Filtrowanie)
+    var showFiltersSheet by remember { mutableStateOf(false) }
+
+    // 2. OPTYMALIZACJA PAMIĘCIOWA (Filtrowanie tylko po zatwierdzonych stanach)
     val minAmount = minAmountText.toFloatOrNull()
     val maxAmount = maxAmountText.toFloatOrNull()
+
+    val activeFiltersCount = listOfNotNull(
+        selectedCategory,
+        minAmount,
+        maxAmount,
+        startDate,
+        endDate
+    ).size
 
     val filteredList = remember(
         expensesList, selectedCategory, startDate, endDate, minAmount, maxAmount
     ) {
         expensesList.filter { expense ->
             val categoryMatch = selectedCategory == null || expense.category == selectedCategory
-
             val startDateMatch = startDate == null || !expense.date.isBefore(startDate)
             val endDateMatch = endDate == null || !expense.date.isAfter(endDate)
-
             val minAmountMatch = minAmount == null || expense.amount >= minAmount
             val maxAmountMatch = maxAmount == null || expense.amount <= maxAmount
 
@@ -90,8 +92,8 @@ fun ExpensesListScreen(
         }.sortedByDescending { it.date }
     }
 
-    // Czysty stan listy (od pozycji 0) ZAWSZE, gdy zmieni się którykolwiek filtr.
-    val listState = remember(selectedCategory, startDate, endDate, minAmountText, maxAmountText) {
+    // Czysty stan listy (od pozycji 0) ZAWSZE, gdy zmienią się zatwierdzone filtry
+    val listState = remember(selectedCategory, startDate, endDate, minAmount, maxAmount) {
         LazyListState()
     }
 
@@ -103,116 +105,28 @@ fun ExpensesListScreen(
                 .background(Color.White)
         ) {
             // ==========================================
-            // SEKCJA FILTRÓW
+            // GÓRNY PASEK Z NAGŁÓWKIEM I PRZYCISKIEM FILTRUJ
             // ==========================================
-            Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Text(
                     text = "Wszystkie wydatki",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    fontWeight = FontWeight.Bold
                 )
 
-                // A. KATEGORIE
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                OutlinedButton(
+                    onClick = { showFiltersSheet = true },
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    item {
-                        CategoryFilterChip(
-                            label = "Wszystkie",
-                            icon = Icons.Default.List,
-                            baseColor = Color.Gray,
-                            isSelected = selectedCategory == null,
-                            onClick = { selectedCategory = null }
-                        )
-                    }
-                    items(ExpenseCategory.values()) { category ->
-                        CategoryFilterChip(
-                            label = category.displayName,
-                            icon = categoryIconFor(category),
-                            baseColor = Color(category.color.toArgb()),
-                            isSelected = selectedCategory == category,
-                            onClick = { selectedCategory = category }
-                        )
-                    }
-                }
-
-                // B. KWOTY (Od - Do)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = minAmountText,
-                        onValueChange = { minAmountText = it },
-                        label = { Text("Od kwoty (zł)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f)
+                    Text(
+                        text = if (activeFiltersCount > 0) "Filtruj ($activeFiltersCount)" else "Filtruj"
                     )
-                    OutlinedTextField(
-                        value = maxAmountText,
-                        onValueChange = { maxAmountText = it },
-                        label = { Text("Do kwoty (zł)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // C. DATY (Od - Do)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Przycisk daty OD
-                    OutlinedButton(
-                        onClick = { showStartDatePicker = true },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = startDate?.format(DateTimeFormatter.ofPattern("dd.MM.yy")) ?: "Od daty",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        if (startDate != null) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Filled.Clear,
-                                contentDescription = "Usuń",
-                                modifier = Modifier.size(16.dp).clickable { startDate = null }
-                            )
-                        }
-                    }
-
-                    // Przycisk daty DO
-                    OutlinedButton(
-                        onClick = { showEndDatePicker = true },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = endDate?.format(DateTimeFormatter.ofPattern("dd.MM.yy")) ?: "Do daty",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        if (endDate != null) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Filled.Clear,
-                                contentDescription = "Usuń",
-                                modifier = Modifier.size(16.dp).clickable { endDate = null }
-                            )
-                        }
-                    }
                 }
             }
 
@@ -248,45 +162,231 @@ fun ExpensesListScreen(
     }
 
     // ==========================================
-    // DIALOGI DAT
+    // BOTTOM SHEET Z FILTRAMI
     // ==========================================
-    if (showStartDatePicker) {
-        val datePickerState = rememberDatePickerState()
-        DatePickerDialog(
-            onDismissRequest = { showStartDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        startDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-                    }
-                    showStartDatePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStartDatePicker = false }) { Text("Anuluj") }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
+    if (showFiltersSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    if (showEndDatePicker) {
-        val datePickerState = rememberDatePickerState()
-        DatePickerDialog(
-            onDismissRequest = { showEndDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        endDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-                    }
-                    showEndDatePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEndDatePicker = false }) { Text("Anuluj") }
-            }
+        // Tymczasowe (robocze) stany — inicjalizowane z aktualnych filtrów przy każdym otwarciu
+        var tempCategory by remember { mutableStateOf(selectedCategory) }
+        var tempMinAmountText by remember { mutableStateOf(minAmountText) }
+        var tempMaxAmountText by remember { mutableStateOf(maxAmountText) }
+        var tempStartDate by remember { mutableStateOf(startDate) }
+        var tempEndDate by remember { mutableStateOf(endDate) }
+
+        var showStartDatePicker by remember { mutableStateOf(false) }
+        var showEndDatePicker by remember { mutableStateOf(false) }
+
+        ModalBottomSheet(
+            onDismissRequest = { showFiltersSheet = false },
+            sheetState = sheetState,
+            containerColor = Color.White
         ) {
-            DatePicker(state = datePickerState)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+            ) {
+                Text(
+                    text = "Filtry",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // A. KATEGORIE
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    items(ExpenseCategory.values()) { category ->
+                        CategoryFilterChip(
+                            label = category.displayName,
+                            icon = categoryIconFor(category),
+                            baseColor = Color(category.color.toArgb()),
+                            isSelected = tempCategory == category,
+                            onClick = {
+                                tempCategory = if (tempCategory == category) null else category
+                            }
+                        )
+                    }
+                }
+
+                // B. KWOTY (Od - Do)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = tempMinAmountText,
+                        onValueChange = { tempMinAmountText = it },
+                        label = { Text("Od kwoty (zł)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = tempMaxAmountText,
+                        onValueChange = { tempMaxAmountText = it },
+                        label = { Text("Do kwoty (zł)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // C. DATY (Od - Do)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showStartDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = tempStartDate?.format(DateTimeFormatter.ofPattern("dd.MM.yy")) ?: "Od daty",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (tempStartDate != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = "Usuń",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { tempStartDate = null }
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { showEndDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = tempEndDate?.format(DateTimeFormatter.ofPattern("dd.MM.yy")) ?: "Do daty",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (tempEndDate != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = "Usuń",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { tempEndDate = null }
+                            )
+                        }
+                    }
+                }
+
+                // D. PRZYCISKI AKCJI
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            tempCategory = null
+                            tempMinAmountText = ""
+                            tempMaxAmountText = ""
+                            tempStartDate = null
+                            tempEndDate = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("Wyczyść")
+                    }
+
+                    Button(
+                        onClick = {
+                            selectedCategory = tempCategory
+                            minAmountText = tempMinAmountText
+                            maxAmountText = tempMaxAmountText
+                            startDate = tempStartDate
+                            endDate = tempEndDate
+                            showFiltersSheet = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("Gotowe")
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // DIALOGI DAT (operują na stanach tymczasowych)
+        // ==========================================
+        if (showStartDatePicker) {
+            val datePickerState = rememberDatePickerState()
+            DatePickerDialog(
+                onDismissRequest = { showStartDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            tempStartDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                        }
+                        showStartDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showStartDatePicker = false }) { Text("Anuluj") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+
+        if (showEndDatePicker) {
+            val datePickerState = rememberDatePickerState()
+            DatePickerDialog(
+                onDismissRequest = { showEndDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            tempEndDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                        }
+                        showEndDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEndDatePicker = false }) { Text("Anuluj") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
         }
     }
 }

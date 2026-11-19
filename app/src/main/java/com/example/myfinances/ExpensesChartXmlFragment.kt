@@ -209,13 +209,22 @@ class ExpensesChartFragment : Fragment() {
         bottomSheetDialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         bottomSheetDialog.behavior.skipCollapsed = true
 
+        // 1. Zamrażamy ekran w tle (MainXmlActivity)
+        val activityWindow = requireActivity().window
+        val originalSoftInputMode = activityWindow.attributes.softInputMode
+        activityWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+
         bottomSheetDialog.setOnShowListener {
             val window = bottomSheetDialog.window ?: return@setOnShowListener
             WindowCompat.setDecorFitsSystemWindows(window, false)
 
-            // Wyłączamy domyślne wcięcia na kontenerach Material, żeby nie szarpały okna
             bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.container)?.fitsSystemWindows = false
             bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.coordinator)?.fitsSystemWindows = false
+
+            // 2. Po zamknięciu dialogu przywracamy adjustPan z Manifestu
+            bottomSheetDialog.setOnDismissListener {
+                activity?.window?.setSoftInputMode(originalSoftInputMode)
+            }
         }
 
         bottomSheetDialog.show()

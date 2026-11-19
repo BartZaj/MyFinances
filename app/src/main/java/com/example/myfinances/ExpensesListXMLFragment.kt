@@ -1,6 +1,9 @@
 package com.example.myfinances
 
 import android.app.DatePickerDialog
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -8,21 +11,22 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import androidx.compose.ui.graphics.toArgb
-import androidx.core.graphics.ColorUtils
-import android.widget.ImageView
-import android.widget.LinearLayout
 
 class ExpensesListFragment : Fragment() {
 
@@ -30,15 +34,7 @@ class ExpensesListFragment : Fragment() {
     private lateinit var progressBar: ProgressBar
     private lateinit var tvEmptyState: TextView
     private lateinit var contentLayout: View
-
-    private lateinit var llCategories: LinearLayout
-    private val categoryViews = mutableMapOf<ExpenseCategory, View>()
-    private lateinit var etMinAmount: TextInputEditText
-    private lateinit var etMaxAmount: TextInputEditText
-    private lateinit var btnStartDate: Button
-    private lateinit var btnEndDate: Button
-    private lateinit var tvClearStartDate: TextView
-    private lateinit var tvClearEndDate: TextView
+    private lateinit var btnFilter: MaterialButton
 
     private lateinit var adapter: InnerExpenseAdapter
     private var allExpenses: List<Expense> = emptyList()
@@ -69,25 +65,20 @@ class ExpensesListFragment : Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_expenses_list, container, false)
 
-        // Bindowanie widoków
         rvExpenses = view.findViewById(R.id.rvExpenses)
         progressBar = view.findViewById(R.id.progressBar)
         tvEmptyState = view.findViewById(R.id.tvEmptyState)
         contentLayout = view.findViewById(R.id.contentLayout)
-        llCategories = view.findViewById(R.id.llCategories)
-        etMinAmount = view.findViewById(R.id.etMinAmount)
-        etMaxAmount = view.findViewById(R.id.etMaxAmount)
-        btnStartDate = view.findViewById(R.id.btnStartDate)
-        btnEndDate = view.findViewById(R.id.btnEndDate)
-        tvClearStartDate = view.findViewById(R.id.tvClearStartDate)
-        tvClearEndDate = view.findViewById(R.id.tvClearEndDate)
+        btnFilter = view.findViewById(R.id.btnFilter)
 
-        // Konfiguracja RecyclerView (kluczowe dla pamięci przy scrollowaniu)
-        adapter = InnerExpenseAdapter(emptyList()) // Używamy adaptera, który stworzyłeś wcześniej
+        adapter = InnerExpenseAdapter(emptyList())
         rvExpenses.layoutManager = LinearLayoutManager(requireContext())
         rvExpenses.adapter = adapter
 
-        setupFilters()
+        btnFilter.setOnClickListener {
+            showFiltersBottomSheet()
+        }
+        updateFilterButtonText()
 
         return view
     }
@@ -107,9 +98,29 @@ class ExpensesListFragment : Fragment() {
         (activity as? MainXmlActivity)?.removeDataListener(dataListener)
     }
 
-    private fun setupFilters() {
-        // A. KATEGORIE
+    private fun showFiltersBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(requireContext())
         val layoutInflater = LayoutInflater.from(requireContext())
+        val sheetView = layoutInflater.inflate(R.layout.dialog_filters, null)
+
+        val llCategories = sheetView.findViewById<LinearLayout>(R.id.llCategories)
+        val etMinAmount = sheetView.findViewById<TextInputEditText>(R.id.etMinAmount)
+        val etMaxAmount = sheetView.findViewById<TextInputEditText>(R.id.etMaxAmount)
+        val btnStartDate = sheetView.findViewById<Button>(R.id.btnStartDate)
+        val btnEndDate = sheetView.findViewById<Button>(R.id.btnEndDate)
+        val tvClearStartDate = sheetView.findViewById<TextView>(R.id.tvClearStartDate)
+        val tvClearEndDate = sheetView.findViewById<TextView>(R.id.tvClearEndDate)
+        val btnClearAll = sheetView.findViewById<MaterialButton>(R.id.btnClearAllFilters)
+        val btnClose = sheetView.findViewById<MaterialButton>(R.id.btnCloseFilters)
+
+        // Tymczasowy (roboczy) stan filtrów - nie zmienia listy w tle
+        var tempCategory = selectedCategory
+        var tempStartDate = startDate
+        var tempEndDate = endDate
+
+        val categoryViews = mutableMapOf<ExpenseCategory, View>()
+
+        // A. KATEGORIE
         ExpenseCategory.entries.forEach { category ->
             val item = layoutInflater.inflate(R.layout.item_category_filter, llCategories, false)
             item.findViewById<TextView>(R.id.tvCategoryName).text = category.displayName
@@ -117,62 +128,121 @@ class ExpensesListFragment : Fragment() {
                 .setImageResource(categoryIconRes(category))
 
             item.setOnClickListener {
-                // Ponowne kliknięcie zaznaczonej kategorii ją odznacza
-                selectedCategory = if (selectedCategory == category) null else category
-                updateCategoryStyles()
-                applyFiltersAndRender(scrollToTop = true)
+                tempCategory = if (tempCategory == category) null else category
+                updateCategoryStyles(categoryViews, tempCategory)
             }
 
             llCategories.addView(item)
             categoryViews[category] = item
         }
-        updateCategoryStyles()
+        updateCategoryStyles(categoryViews, tempCategory)
 
-        // B. KWOTY
-        val amountWatcher = object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                minAmount = etMinAmount.text.toString().toFloatOrNull()
-                maxAmount = etMaxAmount.text.toString().toFloatOrNull()
-                applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
-            }
-        }
-        etMinAmount.addTextChangedListener(amountWatcher)
-        etMaxAmount.addTextChangedListener(amountWatcher)
+        // B. KWOTY - tylko ustawiamy aktualne wartości, bez TextWatchera
+        minAmount?.let { etMinAmount.setText(formatAmountForInput(it)) }
+        maxAmount?.let { etMaxAmount.setText(formatAmountForInput(it)) }
 
         // C. DATY
+        if (tempStartDate != null) {
+            btnStartDate.text = tempStartDate!!.format(dateFormatter)
+            tvClearStartDate.visibility = View.VISIBLE
+        } else {
+            btnStartDate.text = "Od daty"
+            tvClearStartDate.visibility = View.GONE
+        }
+
+        if (tempEndDate != null) {
+            btnEndDate.text = tempEndDate!!.format(dateFormatter)
+            tvClearEndDate.visibility = View.VISIBLE
+        } else {
+            btnEndDate.text = "Do daty"
+            tvClearEndDate.visibility = View.GONE
+        }
+
         btnStartDate.setOnClickListener {
-            showDatePickerDialog(startDate ?: LocalDate.now()) { date ->
-                startDate = date
+            showDatePickerDialog(tempStartDate ?: LocalDate.now()) { date ->
+                tempStartDate = date
                 btnStartDate.text = date.format(dateFormatter)
                 tvClearStartDate.visibility = View.VISIBLE
-                applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
             }
         }
 
         btnEndDate.setOnClickListener {
-            showDatePickerDialog(endDate ?: LocalDate.now()) { date ->
-                endDate = date
+            showDatePickerDialog(tempEndDate ?: LocalDate.now()) { date ->
+                tempEndDate = date
                 btnEndDate.text = date.format(dateFormatter)
                 tvClearEndDate.visibility = View.VISIBLE
-                applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
             }
         }
 
         tvClearStartDate.setOnClickListener {
-            startDate = null
+            tempStartDate = null
             btnStartDate.text = "Od daty"
             tvClearStartDate.visibility = View.GONE
-            applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
         }
 
         tvClearEndDate.setOnClickListener {
-            endDate = null
+            tempEndDate = null
             btnEndDate.text = "Do daty"
             tvClearEndDate.visibility = View.GONE
-            applyFiltersAndRender(scrollToTop = true) // <--- Zmiana
         }
+
+        // D. AKCJE DOLNE
+        btnClearAll.setOnClickListener {
+            tempCategory = null
+            tempStartDate = null
+            tempEndDate = null
+
+            etMinAmount.setText("")
+            etMaxAmount.setText("")
+
+            btnStartDate.text = "Od daty"
+            tvClearStartDate.visibility = View.GONE
+            btnEndDate.text = "Do daty"
+            tvClearEndDate.visibility = View.GONE
+
+            updateCategoryStyles(categoryViews, tempCategory)
+        }
+
+        btnClose.setOnClickListener {
+            selectedCategory = tempCategory
+            minAmount = etMinAmount.text.toString().toFloatOrNull()
+            maxAmount = etMaxAmount.text.toString().toFloatOrNull()
+            startDate = tempStartDate
+            endDate = tempEndDate
+
+            updateFilterButtonText()
+            applyFiltersAndRender(scrollToTop = true)
+            bottomSheetDialog.dismiss()
+        }
+
+        bottomSheetDialog.setContentView(sheetView)
+        bottomSheetDialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        bottomSheetDialog.behavior.skipCollapsed = true
+
+        bottomSheetDialog.setOnShowListener {
+            val window = bottomSheetDialog.window ?: return@setOnShowListener
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+
+            bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.container)?.fitsSystemWindows = false
+            bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.coordinator)?.fitsSystemWindows = false
+        }
+
+        bottomSheetDialog.show()
+    }
+
+    private fun updateFilterButtonText() {
+        var activeCount = 0
+        if (selectedCategory != null) activeCount++
+        if (minAmount != null) activeCount++
+        if (maxAmount != null) activeCount++
+        if (startDate != null) activeCount++
+        if (endDate != null) activeCount++
+
+        btnFilter.text = if (activeCount > 0) "Filtruj ($activeCount)" else "Filtruj"
+    }
+
+    private fun formatAmountForInput(value: Float): String {
+        return if (value % 1f == 0f) value.toInt().toString() else value.toString()
     }
 
     private fun showDatePickerDialog(initialDate: LocalDate, onDateSelected: (LocalDate) -> Unit) {
@@ -182,18 +252,11 @@ class ExpensesListFragment : Fragment() {
                 onDateSelected(LocalDate.of(year, month + 1, dayOfMonth))
             },
             initialDate.year,
-            initialDate.monthValue - 1, // Kalendarz liczy miesiące od 0
+            initialDate.monthValue - 1,
             initialDate.dayOfMonth
         ).show()
     }
 
-    // =========================================================
-    // OPTYMALIZACJA PAMIĘCIOWA (Identyczna z pamięcią w Compose)
-    // =========================================================
-    // Ta metoda wykonuje przeliczenia (filtrowanie i sortowanie) TYLKO WTEDY,
-    // kiedy zmienią się filtry (kliknięcie usera) lub gdy przyjdą nowe dane z bazy (logowanie).
-    // Podczas "scrollowania palcem w dół" ta metoda całkowicie milczy.
-// Zmieniona sygnatura - domyślnie NIE scrolluje (przydatne przy aktualizacji z bazy)
     private fun applyFiltersAndRender(scrollToTop: Boolean = false) {
         val currentSelectedCategory = selectedCategory
         val currentStartDate = startDate
@@ -221,7 +284,6 @@ class ExpensesListFragment : Fragment() {
 
         adapter.updateData(filteredList)
 
-        // DODANE: Sprawdza flagę, zanim przewinie na górę
         if (scrollToTop && filteredList.isNotEmpty()) {
             rvExpenses.scrollToPosition(0)
         }
@@ -229,13 +291,12 @@ class ExpensesListFragment : Fragment() {
 
     private fun dp(value: Int): Float = value * resources.displayMetrics.density
 
-    // Wygląd chipa jak w Composie: po zaznaczeniu kolorowe tło (alpha 0.18), pogrubiony tekst,
-    // przed zaznaczeniem szara ramka i szary tekst
-    // Wygląd jak Box w Composie: zaznaczona kategoria ma kolorowe tło (alpha 0.18),
-    // niezaznaczona szarą ramkę i szary tekst
-    private fun updateCategoryStyles() {
+    private fun updateCategoryStyles(
+        categoryViews: Map<ExpenseCategory, View>,
+        activeCategory: ExpenseCategory?
+    ) {
         categoryViews.forEach { (category, item) ->
-            val isSelected = selectedCategory == category
+            val isSelected = activeCategory == category
             val base = category.color.toArgb()
 
             (item.background.mutate() as GradientDrawable).apply {
