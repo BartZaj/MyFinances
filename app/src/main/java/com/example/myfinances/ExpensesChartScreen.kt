@@ -222,7 +222,10 @@ fun ExpensesScreen(
                                         xAxisLabelSpace = xAxisLabelSpace,
                                         modifier = Modifier
                                             .weight(1f)
-                                            .clickable {
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) {
                                                 val intent = Intent(context, CategoryDetailsActivity::class.java).apply {
                                                     putExtra("CATEGORY_NAME", category.name)
                                                 }

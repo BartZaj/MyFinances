@@ -88,15 +88,11 @@ class ExpensesChartFragment : Fragment() {
             }
         )
         vpCategoryLimits.adapter = limitAdapter
-        vpCategoryLimits.isFocusable = false
-        vpCategoryLimits.isFocusableInTouchMode = false
-        vpCategoryLimits.defaultFocusHighlightEnabled = false
         vpCategoryLimits.getChildAt(0)?.apply {
             isFocusable = false
             isFocusableInTouchMode = false
             defaultFocusHighlightEnabled = false
         }
-        (vpCategoryLimits.getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)?.itemAnimator = null
 
         fabAddExpense.setOnClickListener {
             showAddExpenseDialog()
