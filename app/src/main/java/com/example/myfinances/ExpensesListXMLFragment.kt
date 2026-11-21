@@ -1,15 +1,21 @@
 package com.example.myfinances
 
 import android.app.DatePickerDialog
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -17,13 +23,16 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.internal.ViewUtils.hideKeyboard
 import com.google.android.material.textfield.TextInputEditText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -35,11 +44,13 @@ class ExpensesListFragment : Fragment() {
     private lateinit var tvEmptyState: TextView
     private lateinit var contentLayout: View
     private lateinit var btnFilter: MaterialButton
+    private lateinit var etSearch: TextInputEditText
 
     private lateinit var adapter: InnerExpenseAdapter
     private var allExpenses: List<Expense> = emptyList()
 
     // Stany filtrów
+    private var searchQuery: String = ""
     private var selectedCategory: ExpenseCategory? = null
     private var minAmount: Float? = null
     private var maxAmount: Float? = null
@@ -70,17 +81,60 @@ class ExpensesListFragment : Fragment() {
         tvEmptyState = view.findViewById(R.id.tvEmptyState)
         contentLayout = view.findViewById(R.id.contentLayout)
         btnFilter = view.findViewById(R.id.btnFilter)
+        etSearch = view.findViewById(R.id.etSearch)
 
-        adapter = InnerExpenseAdapter(emptyList())
+        adapter = InnerExpenseAdapter(emptyList()) { expense ->
+            openExpenseDetails(expense)
+        }
         rvExpenses.layoutManager = LinearLayoutManager(requireContext())
         rvExpenses.adapter = adapter
 
+        etSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                searchQuery = s?.toString()?.trim() ?: ""
+                applyFiltersAndRender(scrollToTop = true)
+            }
+        })
+
+        etSearch.setOnEditorActionListener { v, actionId, event ->
+            val isSearchAction = actionId == EditorInfo.IME_ACTION_SEARCH ||
+                    actionId == EditorInfo.IME_ACTION_DONE ||
+                    (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+
+            if (isSearchAction) {
+                hideKeyboard(v)
+                v.clearFocus()
+                true // zwrócenie true blokuje przeskakiwanie klawiatury
+            } else {
+                false
+            }
+        }
+
         btnFilter.setOnClickListener {
-            showFiltersBottomSheet()
+            val isKeyboardOpen = ViewCompat.getRootWindowInsets(requireView())
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+            etSearch.clearFocus()
+            hideKeyboard(etSearch)
+
+            if (isKeyboardOpen) {
+                view.postDelayed({
+                    if (isAdded) showFiltersBottomSheet()
+                }, 150)
+            } else {
+                showFiltersBottomSheet()
+            }
         }
         updateFilterButtonText()
 
         return view
+    }
+
+    private fun hideKeyboard(view: View) {
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -96,6 +150,18 @@ class ExpensesListFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         (activity as? MainXmlActivity)?.removeDataListener(dataListener)
+    }
+
+    private fun openExpenseDetails(expense: Expense) {
+        etSearch.clearFocus()
+        hideKeyboard(etSearch)
+        val intent = Intent(requireContext(), ExpenseDetailXMLActivity::class.java).apply {
+            putExtra("EXTRA_NAME", expense.name)
+            putExtra("EXTRA_AMOUNT", expense.amount.toFloat())
+            putExtra("EXTRA_DATE", expense.date.format(dateFormatter))
+            putExtra("EXTRA_CATEGORY", expense.category.displayName)
+        }
+        startActivity(intent)
     }
 
     private fun showFiltersBottomSheet() {
@@ -258,6 +324,7 @@ class ExpensesListFragment : Fragment() {
     }
 
     private fun applyFiltersAndRender(scrollToTop: Boolean = false) {
+        val currentQuery = searchQuery
         val currentSelectedCategory = selectedCategory
         val currentStartDate = startDate
         val currentEndDate = endDate
@@ -265,13 +332,15 @@ class ExpensesListFragment : Fragment() {
         val currentMax = maxAmount
 
         val filteredList = allExpenses.filter { expense ->
+            val nameMatch = currentQuery.isEmpty() ||
+                    expense.name.contains(currentQuery, ignoreCase = true)
             val categoryMatch = currentSelectedCategory == null || expense.category == currentSelectedCategory
             val startDateMatch = currentStartDate == null || !expense.date.isBefore(currentStartDate)
             val endDateMatch = currentEndDate == null || !expense.date.isAfter(currentEndDate)
             val minAmountMatch = currentMin == null || expense.amount >= currentMin
             val maxAmountMatch = currentMax == null || expense.amount <= currentMax
 
-            categoryMatch && startDateMatch && endDateMatch && minAmountMatch && maxAmountMatch
+            nameMatch && categoryMatch && startDateMatch && endDateMatch && minAmountMatch && maxAmountMatch
         }.sortedByDescending { it.date }
 
         if (filteredList.isEmpty()) {

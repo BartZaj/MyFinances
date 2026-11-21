@@ -1,5 +1,6 @@
 package com.example.myfinances
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Checkroom
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,14 +33,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+private val expenseDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
 // Ikony kategorii (te same, co w ExpandableCategoriesActivity)
 private fun categoryIconFor(category: ExpenseCategory): ImageVector =
@@ -57,7 +71,14 @@ fun ExpensesListScreen(
     expensesList: List<Expense>,
     isLoading: Boolean
 ) {
-    // 1. ZATWIERDZONE STANY FILTRÓW
+    val context = LocalContext.current
+    val view = LocalView.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // 1. ZATWIERDZONE STANY FILTRÓW I WYSZUKIWANIA
+    var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
     var startDate by remember { mutableStateOf<LocalDate?>(null) }
     var endDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -66,7 +87,8 @@ fun ExpensesListScreen(
 
     var showFiltersSheet by remember { mutableStateOf(false) }
 
-    // 2. OPTYMALIZACJA PAMIĘCIOWA (Filtrowanie tylko po zatwierdzonych stanach)
+    // 2. OPTYMALIZACJA PAMIĘCIOWA (Filtrowanie po frazie i zatwierdzonych stanach)
+    val trimmedQuery = searchQuery.trim()
     val minAmount = minAmountText.toFloatOrNull()
     val maxAmount = maxAmountText.toFloatOrNull()
 
@@ -79,22 +101,31 @@ fun ExpensesListScreen(
     ).size
 
     val filteredList = remember(
-        expensesList, selectedCategory, startDate, endDate, minAmount, maxAmount
+        expensesList, trimmedQuery, selectedCategory, startDate, endDate, minAmount, maxAmount
     ) {
         expensesList.filter { expense ->
+            val nameMatch = trimmedQuery.isEmpty() ||
+                    expense.name.contains(trimmedQuery, ignoreCase = true)
             val categoryMatch = selectedCategory == null || expense.category == selectedCategory
             val startDateMatch = startDate == null || !expense.date.isBefore(startDate)
             val endDateMatch = endDate == null || !expense.date.isAfter(endDate)
             val minAmountMatch = minAmount == null || expense.amount >= minAmount
             val maxAmountMatch = maxAmount == null || expense.amount <= maxAmount
 
-            categoryMatch && startDateMatch && endDateMatch && minAmountMatch && maxAmountMatch
+            nameMatch && categoryMatch && startDateMatch && endDateMatch && minAmountMatch && maxAmountMatch
         }.sortedByDescending { it.date }
     }
 
-    // Czysty stan listy (od pozycji 0) ZAWSZE, gdy zmienią się zatwierdzone filtry
-    val listState = remember(selectedCategory, startDate, endDate, minAmount, maxAmount) {
+    // Czysty stan listy (od pozycji 0) ZAWSZE, gdy zmienią się wyszukiwanie lub filtry
+    val listState = remember(trimmedQuery, selectedCategory, startDate, endDate, minAmount, maxAmount) {
         LazyListState()
+    }
+
+    LaunchedEffect(showFiltersSheet) {
+        if (!showFiltersSheet) {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
     }
 
     Scaffold { paddingValues ->
@@ -110,7 +141,7 @@ fun ExpensesListScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -121,7 +152,22 @@ fun ExpensesListScreen(
                 )
 
                 OutlinedButton(
-                    onClick = { showFiltersSheet = true },
+                    onClick = {
+                        val isKeyboardOpen = ViewCompat.getRootWindowInsets(view)
+                            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+
+                        if (isKeyboardOpen) {
+                            coroutineScope.launch {
+                                delay(150)
+                                showFiltersSheet = true
+                            }
+                        } else {
+                            showFiltersSheet = true
+                        }
+                    },
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
@@ -129,6 +175,44 @@ fun ExpensesListScreen(
                     )
                 }
             }
+
+            // ==========================================
+            // POLE WYSZUKIWANIA
+            // ==========================================
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Szukaj wydatku...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Szukaj"
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Wyczyść"
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                    }
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp)
+            )
 
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
 
@@ -154,7 +238,22 @@ fun ExpensesListScreen(
                         items = filteredList,
                         key = { it.id }
                     ) { expense ->
-                        ExpenseListItemCard(expense = expense)
+                        ExpenseListItemCard(
+                            expense = expense,
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+
+                                // Podmień nazwę klasy na swoją aktywność ze szczegółami dla wersji Compose
+                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
+                                    putExtra("EXTRA_NAME", expense.name)
+                                    putExtra("EXTRA_AMOUNT", expense.amount.toFloat())
+                                    putExtra("EXTRA_DATE", expense.date.format(expenseDateFormatter))
+                                    putExtra("EXTRA_CATEGORY", expense.category.displayName)
+                                }
+                                context.startActivity(intent)
+                            }
+                        )
                     }
                 }
             }
@@ -178,10 +277,18 @@ fun ExpensesListScreen(
         var showEndDatePicker by remember { mutableStateOf(false) }
 
         ModalBottomSheet(
-            onDismissRequest = { showFiltersSheet = false },
+            onDismissRequest = {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+                showFiltersSheet = false
+            },
             sheetState = sheetState,
             containerColor = Color.White
         ) {
+            // Osobny FocusManager i KeyboardController dla okna BottomSheetu
+            val sheetFocusManager = LocalFocusManager.current
+            val sheetKeyboardController = LocalSoftwareKeyboardController.current
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -312,6 +419,8 @@ fun ExpensesListScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
+                            sheetFocusManager.clearFocus(force = true)
+                            sheetKeyboardController?.hide()
                             tempCategory = null
                             tempMinAmountText = ""
                             tempMaxAmountText = ""
@@ -326,12 +435,22 @@ fun ExpensesListScreen(
 
                     Button(
                         onClick = {
+                            sheetFocusManager.clearFocus(force = true)
+                            sheetKeyboardController?.hide()
+
                             selectedCategory = tempCategory
                             minAmountText = tempMinAmountText
                             maxAmountText = tempMaxAmountText
                             startDate = tempStartDate
                             endDate = tempEndDate
-                            showFiltersSheet = false
+
+                            coroutineScope.launch {
+                                sheetState.hide()
+                            }.invokeOnCompletion {
+                                if (!sheetState.isVisible) {
+                                    showFiltersSheet = false
+                                }
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(16.dp)
@@ -445,9 +564,12 @@ private fun CategoryFilterChip(
     }
 }
 
-// Karta wydatku w stylu ExpandableCategoryCard
+// Karta wydatku w stylu ExpandableCategoryCard (klikalna bez efektu ripple)
 @Composable
-fun ExpenseListItemCard(expense: Expense) {
+fun ExpenseListItemCard(
+    expense: Expense,
+    onClick: () -> Unit
+) {
     val baseColor = Color(expense.category.color.toArgb())
 
     Row(
@@ -455,6 +577,11 @@ fun ExpenseListItemCard(expense: Expense) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(baseColor.copy(alpha = 0.18f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -489,7 +616,7 @@ fun ExpenseListItemCard(expense: Expense) {
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = expense.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                    text = expense.date.format(expenseDateFormatter),
                     color = Color.Gray,
                     fontSize = 12.sp
                 )

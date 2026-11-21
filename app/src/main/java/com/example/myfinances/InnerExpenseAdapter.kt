@@ -23,7 +23,9 @@ fun categoryIconRes(category: ExpenseCategory): Int = when (category.name) {
     else -> R.drawable.baseline_directions_car_24
 }
 
-class InnerExpenseAdapter(private var expenses: List<Expense>) :
+class InnerExpenseAdapter
+    (private var expenses: List<Expense>,
+     private val onItemClick: (Expense) -> Unit) :
     RecyclerView.Adapter<InnerExpenseAdapter.ExpenseViewHolder>() {
 
     fun updateData(newExpenses: List<Expense>) {
@@ -68,6 +70,10 @@ class InnerExpenseAdapter(private var expenses: List<Expense>) :
                 ?.setColor(ColorUtils.setAlphaComponent(baseColor, 46)) // 0.18 * 255
             (flCategoryIcon.background.mutate() as? GradientDrawable)
                 ?.setColor(baseColor)
+
+            itemView.setOnClickListener {
+                onItemClick(expense)
+            }
         }
     }
 }
