@@ -19,4 +19,9 @@
         android:id="@+id/nav_expenses_list"
         android:name="com.example.myfinances.ExpensesListFragment"
         android:label="Lista" />
+
+    <fragment
+        android:id="@+id/nav_savings_goals"
+        android:name="com.example.myfinances.SavingsGoalsFragment"
+        android:label="Cele" />
 </navigation>
