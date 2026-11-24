@@ -262,10 +262,6 @@ fun ExpandableCategoryCard(
                             .clickable {
                                 val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
                                     putExtra("EXTRA_ID", expense.id)
-                                    putExtra("EXTRA_NAME", expense.name)
-                                    putExtra("EXTRA_AMOUNT", expense.amount)
-                                    putExtra("EXTRA_DATE", expense.date.toString())
-                                    putExtra("EXTRA_CATEGORY", expense.category.name)
                                 }
                                 context.startActivity(intent)
                             }

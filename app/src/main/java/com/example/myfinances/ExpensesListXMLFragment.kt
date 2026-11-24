@@ -156,10 +156,7 @@ class ExpensesListFragment : Fragment() {
         etSearch.clearFocus()
         hideKeyboard(etSearch)
         val intent = Intent(requireContext(), ExpenseDetailXMLActivity::class.java).apply {
-            putExtra("EXTRA_NAME", expense.name)
-            putExtra("EXTRA_AMOUNT", expense.amount.toFloat())
-            putExtra("EXTRA_DATE", expense.date.format(dateFormatter))
-            putExtra("EXTRA_CATEGORY", expense.category.displayName)
+            putExtra("EXTRA_ID", expense.id)
         }
         startActivity(intent)
     }

@@ -140,7 +140,10 @@ fun SavingsGoalsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(items = sortedGoals, key = { it.id }) { goal ->
+                    items(
+                        items = sortedGoals,
+                        key = { "${it.id}_${it.isCompleted}" }
+                    ) { goal ->
                         SavingsGoalCard(
                             goal = goal,
                             modifier = Modifier.animateItem(),

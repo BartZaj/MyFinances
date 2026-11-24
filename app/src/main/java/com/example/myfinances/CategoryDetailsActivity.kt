@@ -270,14 +270,9 @@ fun CategoryDetailsScreen(categoryName: String) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val intent =
-                                    Intent(context, ExpenseDetailActivity::class.java).apply {
-                                        putExtra("EXTRA_ID", expense.id)
-                                        putExtra("EXTRA_NAME", expense.name)
-                                        putExtra("EXTRA_AMOUNT", expense.amount)
-                                        putExtra("EXTRA_DATE", expense.date.toString())
-                                        putExtra("EXTRA_CATEGORY", expense.category.name)
-                                    }
+                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
+                                    putExtra("EXTRA_ID", expense.id)
+                                }
                                 context.startActivity(intent)
                             }
                             .padding(vertical = 8.dp),

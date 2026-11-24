@@ -244,12 +244,8 @@ fun ExpensesListScreen(
                                 focusManager.clearFocus()
                                 keyboardController?.hide()
 
-                                // Podmień nazwę klasy na swoją aktywność ze szczegółami dla wersji Compose
                                 val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
-                                    putExtra("EXTRA_NAME", expense.name)
-                                    putExtra("EXTRA_AMOUNT", expense.amount.toFloat())
-                                    putExtra("EXTRA_DATE", expense.date.format(expenseDateFormatter))
-                                    putExtra("EXTRA_CATEGORY", expense.category.displayName)
+                                    putExtra("EXTRA_ID", expense.id)
                                 }
                                 context.startActivity(intent)
                             }

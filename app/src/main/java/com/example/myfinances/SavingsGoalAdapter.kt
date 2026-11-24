@@ -132,7 +132,7 @@ class SavingsGoalAdapter(
 
     private class GoalDiffCallback : DiffUtil.ItemCallback<SavingsGoal>() {
         override fun areItemsTheSame(oldItem: SavingsGoal, newItem: SavingsGoal): Boolean =
-            oldItem.id == newItem.id
+            oldItem.id == newItem.id && oldItem.isCompleted == newItem.isCompleted
 
         override fun areContentsTheSame(oldItem: SavingsGoal, newItem: SavingsGoal): Boolean =
             oldItem == newItem
