@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.FrameLayout
@@ -17,24 +18,22 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
+import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
-class ExpenseDetailXMLActivity : AppCompatActivity() {
+class ExpenseDetailXmlFragment : Fragment() {
 
     private lateinit var toolbar: MaterialToolbar
     private lateinit var progressBar: ProgressBar
@@ -62,23 +61,55 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
     private var isDeleting = false
 
     private var expenseRef: DatabaseReference? = null
-    private var valueEventListener: ValueEventListener? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_expense_detail)
+    private val dataListener: (List<Expense>) -> Unit = { allExpenses ->
+        if (isAdded) {
+            progressBar.visibility = View.GONE
+            val found = allExpenses.find { it.id == expenseId }
+            if (found != null) {
+                currentExpense = found
+                renderExpense(found)
+            } else {
+                currentExpense = null
+                scrollContent.visibility = View.GONE
+                if (!isDeleting) {
+                    tvNotFound.visibility = View.VISIBLE
+                }
+            }
+        }
+    }
 
-        val id = intent.getStringExtra("EXTRA_ID")
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val view = inflater.inflate(R.layout.activity_expense_detail, container, false)
+        bindViews(view)
+        setupStaticStyles()
+        return view
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        val id = arguments?.getString("EXTRA_ID")
         if (id.isNullOrBlank()) {
-            finish()
+            findNavController().popBackStack()
             return
         }
         expenseId = id
 
-        bindViews()
-        setupStaticStyles()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
+            expenseRef = FirebaseDatabase.getInstance()
+                .getReference("Users")
+                .child(uid)
+                .child("Expenses")
+                .child(expenseId)
+        }
 
-        toolbar.setNavigationOnClickListener { finish() }
+        toolbar.setNavigationOnClickListener { findNavController().popBackStack() }
 
         btnEditExpense.setOnClickListener {
             currentExpense?.let { showEditDialog(it) }
@@ -88,28 +119,38 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
             currentExpense?.let { showDeleteDialog(it) }
         }
 
-        observeExpense()
+        val mainActivity = activity as? MainXmlActivity
+        if (mainActivity?.isDataLoaded == false) {
+            progressBar.visibility = View.VISIBLE
+            scrollContent.visibility = View.GONE
+        }
+        mainActivity?.addDataListener(dataListener)
     }
 
-    private fun bindViews() {
-        toolbar = findViewById(R.id.toolbarDetail)
-        progressBar = findViewById(R.id.progressBarDetail)
-        tvNotFound = findViewById(R.id.tvNotFound)
-        scrollContent = findViewById(R.id.scrollContent)
+    override fun onDestroyView() {
+        super.onDestroyView()
+        (activity as? MainXmlActivity)?.removeDataListener(dataListener)
+    }
 
-        cardHero = findViewById(R.id.cardHero)
-        flDetailIconBg = findViewById(R.id.flDetailIconBg)
-        ivDetailCategoryIcon = findViewById(R.id.ivDetailCategoryIcon)
-        tvDetailName = findViewById(R.id.tvDetailName)
-        tvDetailAmount = findViewById(R.id.tvDetailAmount)
+    private fun bindViews(view: View) {
+        toolbar = view.findViewById(R.id.toolbarDetail)
+        progressBar = view.findViewById(R.id.progressBarDetail)
+        tvNotFound = view.findViewById(R.id.tvNotFound)
+        scrollContent = view.findViewById(R.id.scrollContent)
 
-        cardInfo = findViewById(R.id.cardInfo)
-        viewCategoryDot = findViewById(R.id.viewCategoryDot)
-        tvDetailCategory = findViewById(R.id.tvDetailCategory)
-        tvDetailDate = findViewById(R.id.tvDetailDate)
+        cardHero = view.findViewById(R.id.cardHero)
+        flDetailIconBg = view.findViewById(R.id.flDetailIconBg)
+        ivDetailCategoryIcon = view.findViewById(R.id.ivDetailCategoryIcon)
+        tvDetailName = view.findViewById(R.id.tvDetailName)
+        tvDetailAmount = view.findViewById(R.id.tvDetailAmount)
 
-        btnDeleteExpense = findViewById(R.id.btnDeleteExpense)
-        btnEditExpense = findViewById(R.id.btnEditExpense)
+        cardInfo = view.findViewById(R.id.cardInfo)
+        viewCategoryDot = view.findViewById(R.id.viewCategoryDot)
+        tvDetailCategory = view.findViewById(R.id.tvDetailCategory)
+        tvDetailDate = view.findViewById(R.id.tvDetailDate)
+
+        btnDeleteExpense = view.findViewById(R.id.btnDeleteExpense)
+        btnEditExpense = view.findViewById(R.id.btnEditExpense)
     }
 
     private fun setupStaticStyles() {
@@ -120,69 +161,12 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
         }
     }
 
-    private fun observeExpense() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            progressBar.visibility = View.GONE
-            tvNotFound.visibility = View.VISIBLE
-            return
-        }
-
-        expenseRef = FirebaseDatabase.getInstance()
-            .getReference("Users")
-            .child(uid)
-            .child("Expenses")
-            .child(expenseId)
-
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                progressBar.visibility = View.GONE
-                if (snapshot.exists()) {
-                    val name = snapshot.child("name").getValue(String::class.java) ?: ""
-                    val amount = snapshot.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                    val dateStr = snapshot.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                    val catStr = snapshot.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
-
-                    val category = try {
-                        ExpenseCategory.valueOf(catStr)
-                    } catch (_: IllegalArgumentException) {
-                        ExpenseCategory.OTHER
-                    }
-
-                    val expense = Expense(
-                        id = expenseId,
-                        name = name,
-                        amount = amount,
-                        date = LocalDate.parse(dateStr),
-                        category = category
-                    )
-                    currentExpense = expense
-                    renderExpense(expense)
-                } else {
-                    currentExpense = null
-                    scrollContent.visibility = View.GONE
-                    if (!isDeleting) {
-                        tvNotFound.visibility = View.VISIBLE
-                    }
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                progressBar.visibility = View.GONE
-                tvNotFound.visibility = View.VISIBLE
-            }
-        }
-
-        valueEventListener = listener
-        expenseRef?.addValueEventListener(listener)
-    }
-
     private fun renderExpense(expense: Expense) {
         tvNotFound.visibility = View.GONE
         scrollContent.visibility = View.VISIBLE
 
         val baseColor = expense.category.color.toArgb()
-        val cardBgColor = ColorUtils.setAlphaComponent(baseColor, 46) // 0.18 * 255
+        val cardBgColor = ColorUtils.setAlphaComponent(baseColor, 46)
 
         cardHero.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -215,8 +199,8 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
     }
 
     private fun showEditDialog(expense: Expense) {
-        // Podmień R.layout.dialog_add_expense na nazwę Twojego pliku z głównego ekranu
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_add_expense, null)
+        val ctx = requireContext()
+        val dialogView = LayoutInflater.from(ctx).inflate(R.layout.dialog_add_expense, null)
         val etName = dialogView.findViewById<TextInputEditText>(R.id.etExpenseName)
         val etAmount = dialogView.findViewById<TextInputEditText>(R.id.etExpenseAmount)
         val etDate = dialogView.findViewById<TextInputEditText>(R.id.etExpenseDate)
@@ -225,7 +209,6 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
         var selectedDate = expense.date
         var selectedCategory = expense.category
 
-        // Wypełnienie aktualnymi danymi wydatku
         etName.setText(expense.name)
         val formattedAmount = if (expense.amount % 1f == 0f) {
             expense.amount.toInt().toString()
@@ -237,7 +220,7 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
 
         val categories = ExpenseCategory.values()
         val categoryNames = categories.map { it.displayName }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, categoryNames)
+        val adapter = ArrayAdapter(ctx, android.R.layout.simple_dropdown_item_1line, categoryNames)
         spinnerCategory.setAdapter(adapter)
         spinnerCategory.setText(selectedCategory.displayName, false)
         spinnerCategory.setOnItemClickListener { _, _, position, _ ->
@@ -246,7 +229,7 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
 
         etDate.setOnClickListener {
             DatePickerDialog(
-                this,
+                ctx,
                 { _, year, month, dayOfMonth ->
                     selectedDate = LocalDate.of(year, month + 1, dayOfMonth)
                     etDate.setText(selectedDate.toString())
@@ -257,7 +240,7 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
             ).show()
         }
 
-        val dialog = MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(ctx)
             .setTitle("Edytuj wydatek")
             .setView(dialogView)
             .setNegativeButton("Anuluj", null)
@@ -288,11 +271,11 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
 
                 expenseRef?.updateChildren(updatedData)
                     ?.addOnSuccessListener {
-                        Toast.makeText(this, "Zapisano zmiany", Toast.LENGTH_SHORT).show()
+                        context?.let { Toast.makeText(it, "Zapisano zmiany", Toast.LENGTH_SHORT).show() }
                         dialog.dismiss()
                     }
                     ?.addOnFailureListener {
-                        Toast.makeText(this, "Nie udało się zapisać zmian", Toast.LENGTH_SHORT).show()
+                        context?.let { Toast.makeText(it, "Nie udało się zapisać zmian", Toast.LENGTH_SHORT).show() }
                     }
             }
         }
@@ -301,7 +284,8 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
     }
 
     private fun showDeleteDialog(expense: Expense) {
-        val dialog = MaterialAlertDialogBuilder(this)
+        val ctx = requireContext()
+        val dialog = MaterialAlertDialogBuilder(ctx)
             .setTitle("Usuń wydatek")
             .setMessage("Czy na pewno chcesz usunąć wydatek „${expense.name}”? Tej operacji nie można cofnąć.")
             .setNegativeButton("Anuluj", null)
@@ -309,12 +293,14 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
                 isDeleting = true
                 expenseRef?.removeValue()
                     ?.addOnSuccessListener {
-                        Toast.makeText(this, "Usunięto wydatek", Toast.LENGTH_SHORT).show()
-                        finish()
+                        context?.let { Toast.makeText(it, "Usunięto wydatek", Toast.LENGTH_SHORT).show() }
+                        if (isAdded) {
+                            findNavController().popBackStack()
+                        }
                     }
                     ?.addOnFailureListener {
                         isDeleting = false
-                        Toast.makeText(this, "Nie udało się usunąć wydatku", Toast.LENGTH_SHORT).show()
+                        context?.let { Toast.makeText(it, "Nie udało się usunąć wydatku", Toast.LENGTH_SHORT).show() }
                     }
             }
             .create()
@@ -328,9 +314,4 @@ class ExpenseDetailXMLActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Float = value * resources.displayMetrics.density
-
-    override fun onDestroy() {
-        super.onDestroy()
-        valueEventListener?.let { expenseRef?.removeEventListener(it) }
-    }
 }

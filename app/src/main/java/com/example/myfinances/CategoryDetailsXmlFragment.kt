@@ -1,24 +1,25 @@
 package com.example.myfinances
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Bundle
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
+import androidx.core.os.bundleOf
+import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import java.time.LocalDate
 
-class CategoryDetailsXmlActivity : AppCompatActivity() {
+class CategoryDetailsXmlFragment : Fragment() {
 
     private lateinit var progressBar: ProgressBar
     private lateinit var contentLayout: LinearLayout
@@ -27,67 +28,68 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
     private lateinit var pieChartContainer: LinearLayout
     private lateinit var legendContainer: LinearLayout
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_category_details_xml)
+    private var categoryName: String = ""
 
-        progressBar = findViewById(R.id.progressBarDetails)
-        contentLayout = findViewById(R.id.contentLayoutDetails)
-        tvCategoryTitle = findViewById(R.id.tvCategoryTitle)
-        tvTotalSum = findViewById(R.id.tvTotalSum)
-        pieChartContainer = findViewById(R.id.pieChartContainer)
-        legendContainer = findViewById(R.id.legendContainer)
+    private val dataListener: (List<Expense>) -> Unit = { allExpenses ->
+        if (isAdded) {
+            val currentMonth = LocalDate.now().monthValue
+            val currentYear = LocalDate.now().year
 
-        val categoryName = intent.getStringExtra("CATEGORY_NAME") ?: return
+            val filteredExpenses = allExpenses
+                .filter {
+                    it.category.name == categoryName &&
+                            it.date.monthValue == currentMonth &&
+                            it.date.year == currentYear
+                }
+                .sortedByDescending { it.amount }
+
+            displayData(filteredExpenses)
+        }
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val view = inflater.inflate(R.layout.activity_category_details_xml, container, false)
+
+        progressBar = view.findViewById(R.id.progressBarDetails)
+        contentLayout = view.findViewById(R.id.contentLayoutDetails)
+        tvCategoryTitle = view.findViewById(R.id.tvCategoryTitle)
+        tvTotalSum = view.findViewById(R.id.tvTotalSum)
+        pieChartContainer = view.findViewById(R.id.pieChartContainer)
+        legendContainer = view.findViewById(R.id.legendContainer)
+
+        categoryName = arguments?.getString("CATEGORY_NAME").orEmpty()
         tvCategoryTitle.text = "Szczegóły: $categoryName"
 
-        loadCategoryData(categoryName)
+        return view
     }
 
-    private fun loadCategoryData(categoryName: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
-        databaseRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val currentMonth = LocalDate.now().monthValue
-                val currentYear = LocalDate.now().year
+        if (categoryName.isBlank()) {
+            findNavController().popBackStack()
+            return
+        }
 
-                val fetchedExpenses = mutableListOf<Expense>()
-                for (child in snapshot.children) {
-                    val catStr = child.child("category").getValue(String::class.java) ?: ""
-
-                    if (catStr == categoryName) {
-                        val id = child.key ?: ""
-                        val name = child.child("name").getValue(String::class.java) ?: ""
-                        val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                        val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-
-                        val date = LocalDate.parse(dateStr)
-
-                        // DODANY WARUNEK: Tylko wydatki z bieżącego miesiąca i roku
-                        if (date.monthValue == currentMonth && date.year == currentYear) {
-                            fetchedExpenses.add(Expense(id, name, amount, date, ExpenseCategory.valueOf(catStr)))
-                        }
-                    }
-                }
-
-                fetchedExpenses.sortByDescending { it.amount }
-                displayData(fetchedExpenses)
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                progressBar.visibility = View.GONE
-            }
-        })
+        val mainActivity = activity as? MainXmlActivity
+        if (mainActivity?.isDataLoaded == false) {
+            progressBar.visibility = View.VISIBLE
+            contentLayout.visibility = View.GONE
+        }
+        mainActivity?.addDataListener(dataListener)
     }
 
-    // Funkcja generująca nieskończoną ilość unikalnych kolorów
+    override fun onDestroyView() {
+        super.onDestroyView()
+        (activity as? MainXmlActivity)?.removeDataListener(dataListener)
+    }
+
     private fun generateColor(index: Int): Int {
-        // Użycie Złotego Kąta (137.5 stopni) gwarantuje, że każdy kolejny kolor
-        // jest przesunięty na kole barw w sposób minimalizujący nakładanie się.
         val hue = (index * 137.508f) % 360f
-        // Nasycenie (0.7) i Jasność (0.9) - dają ładne, żywe, "pastelowe" odcienie
         return Color.HSVToColor(floatArrayOf(hue, 0.7f, 0.9f))
     }
 
@@ -98,13 +100,12 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         pieChartContainer.removeAllViews()
 
         val totalSum = expenses.sumOf { it.amount.toDouble() }.toFloat()
-        // Kwota do dwóch miejsc po przecinku
         tvTotalSum.text = String.format("%.2f zł", totalSum)
 
         val amounts = expenses.map { it.amount }
         val dynamicallyGeneratedColors = expenses.indices.map { generateColor(it) }
 
-        val pieChartView = PieChartView(this, amounts, dynamicallyGeneratedColors)
+        val pieChartView = PieChartView(requireContext(), amounts, dynamicallyGeneratedColors)
 
         val sizePx = android.util.TypedValue.applyDimension(
             android.util.TypedValue.COMPLEX_UNIT_DIP,
@@ -117,21 +118,23 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
         expenses.forEachIndexed { index, expense ->
             val percentage = if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
             val color = dynamicallyGeneratedColors[index]
-            // TU BYŁ BŁĄD: Przekazujemy cały obiekt 'expense', a nie tylko jego nazwę i kwotę
             addLegendItem(expense, percentage, color)
         }
     }
 
-    // TU BYŁ BŁĄD: Przyjmujemy obiekt Expense jako argument
     private fun addLegendItem(expense: Expense, percentage: Int, color: Int) {
-        val row = LinearLayout(this).apply {
+        val ctx = requireContext()
+
+        val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
                 setMargins(0, 16, 0, 16)
             }
             gravity = Gravity.CENTER_VERTICAL
 
-            // TU BYŁ BŁĄD: Te linie muszą być wewnątrz bloku .apply {} obiektu row!
             isClickable = true
             isFocusable = true
             val outValue = android.util.TypedValue()
@@ -139,14 +142,15 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
             setBackgroundResource(outValue.resourceId)
 
             setOnClickListener {
-                val intent = Intent(this@CategoryDetailsXmlActivity, ExpenseDetailXMLActivity::class.java).apply {
-                    putExtra("EXTRA_ID", expense.id)
-                }
-                startActivity(intent)
+                findNavController().navigate(
+                    R.id.expenseDetailXmlFragment,
+                    bundleOf("EXTRA_ID" to expense.id),
+                    slideNavOptions
+                )
             }
-        } // <- Tutaj zamyka się blok apply dla obiektu row
+        }
 
-        val colorIndicator = View(this).apply {
+        val colorIndicator = View(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(40, 40).apply { setMargins(0, 0, 32, 0) }
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -154,26 +158,25 @@ class CategoryDetailsXmlActivity : AppCompatActivity() {
             }
         }
 
-        val tvName = TextView(this).apply {
+        val tvName = TextView(ctx).apply {
             text = expense.name
             textSize = 16f
             setTextColor(Color.DKGRAY)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val rightCol = LinearLayout(this).apply {
+        val rightCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
         }
 
-        val tvAmount = TextView(this).apply {
-            // TU BYŁ BŁĄD: Formatowanie do 2 miejsc po przecinku
+        val tvAmount = TextView(ctx).apply {
             text = String.format("- %.2f zł", expense.amount)
             setTextColor(color)
             textSize = 16f
         }
 
-        val tvPercentage = TextView(this).apply {
+        val tvPercentage = TextView(ctx).apply {
             text = "$percentage%"
             setTextColor(Color.GRAY)
             textSize = 12f
@@ -217,17 +220,14 @@ class PieChartView(context: Context, private val data: List<Float>, private val 
         var currentAngle = -90f + rotationAngle
         val padding = paint.strokeWidth / 2f
 
-        // UWAGA: Poprawiony błąd z Twojego kodu (brakowało minusa)
         rectF.set(padding, padding, width - padding, height - padding)
 
         val cx = width / 2f
         val cy = height / 2f
-        // UWAGA: Poprawiony błąd (brakowało minusa)
         val radius = (width - paint.strokeWidth) / 2f
 
         data.forEachIndexed { index, value ->
             val sweepAngle = if (total > 0) (value / total) * 360f else 0f
-            // Używamy koloru bezpośrednio, ponieważ teraz obydwie listy mają tę samą wielkość
             paint.color = colors[index]
             canvas.drawArc(rectF, currentAngle, sweepAngle, false, paint)
 

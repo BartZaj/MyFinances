@@ -24,4 +24,19 @@
         android:id="@+id/nav_savings_goals"
         android:name="com.example.myfinances.SavingsGoalsFragment"
         android:label="Cele" />
+
+    <fragment
+        android:id="@+id/categoryDetailsXmlFragment"
+        android:name="com.example.myfinances.CategoryDetailsXmlFragment"
+        android:label="Szczegóły kategorii" />
+
+    <fragment
+        android:id="@+id/expandableCategoriesXmlFragment"
+        android:name="com.example.myfinances.ExpandableCategoriesXmlFragment"
+        android:label="Kategorie" />
+
+    <fragment
+        android:id="@+id/expenseDetailXmlFragment"
+        android:name="com.example.myfinances.ExpenseDetailXmlFragment"
+        android:label="Szczegóły wydatku" />
 </navigation>

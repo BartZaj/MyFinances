@@ -28,7 +28,6 @@ class MonthsChartView @JvmOverloads constructor(
     private var onMonthClickListener: ((YearMonth) -> Unit)? = null
     private var animator: ValueAnimator? = null
 
-    // Pędzle
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2196F3")
         strokeWidth = 12f
@@ -37,7 +36,6 @@ class MonthsChartView @JvmOverloads constructor(
         strokeJoin = Paint.Join.ROUND
     }
 
-    // Ujednolicony niebieski kolor dla wykresu z ostatnich 6 miesięcy
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2196F3")
         style = Paint.Style.FILL
@@ -59,7 +57,6 @@ class MonthsChartView @JvmOverloads constructor(
         color = Color.BLACK
         textSize = 28f
         textAlign = Paint.Align.CENTER
-        // Drobniejszy tekst odpowiadający textSize="12sp" z layoutu XML
     }
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.LTGRAY
@@ -68,28 +65,38 @@ class MonthsChartView @JvmOverloads constructor(
     }
 
     private val xAxisSpace = 100f
-    // Zwiększono margines lewy ze 80f na 130f, aby zapobiec ucinaniu większych kwot
     private val yAxisSpace = 130f
     private val topSpace = 80f
-    private val barWidth = 90f // Szerokość dopasowana do layoutu 44dp
+    private val barWidth = 90f
 
-    fun setData(data: List<Pair<String, Float>>, raw: List<YearMonth>) {
+    fun setData(data: List<Pair<String, Float>>, raw: List<YearMonth>, animate: Boolean = true) {
         this.chartData = data
         this.rawMonths = raw
         val maxTotal = chartData.maxOfOrNull { it.second } ?: 0f
-        // Zmodyfikowana logika wyliczania zaokrągleń
         yAxisMax = when {
             maxTotal >= 1000f -> ((maxTotal / 500).toInt() + 1) * 500f
             maxTotal > 0f -> ((maxTotal / 100).toInt() + 1) * 100f
             else -> 100f
         }
-        startAnimation()
+        if (animate) {
+            startAnimation()
+        } else {
+            animator?.cancel()
+            animationProgress = 1f
+            invalidate()
+        }
     }
 
-    fun setChartType(isBar: Boolean) {
+    fun setChartType(isBar: Boolean, animate: Boolean = true) {
         if (this.isBarChart != isBar) {
             this.isBarChart = isBar
-            startAnimation()
+            if (animate) {
+                startAnimation()
+            } else {
+                animator?.cancel()
+                animationProgress = 1f
+                invalidate()
+            }
         }
     }
 
@@ -102,7 +109,7 @@ class MonthsChartView @JvmOverloads constructor(
         animationProgress = 0f
         animator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 1200
-            startDelay = 100 // Opóźnienie startu analogiczne do wykresu z kategoriami
+            startDelay = 100
             interpolator = DecelerateInterpolator()
             addUpdateListener {
                 animationProgress = it.animatedValue as Float
@@ -127,7 +134,12 @@ class MonthsChartView @JvmOverloads constructor(
         val stepValue = yAxisMax / stepCount
         for (i in 0..stepCount) {
             val y = chartBottom - (drawingHeight * (i.toFloat() / stepCount))
-            canvas.drawText("${(stepValue * i).toInt()}", yAxisSpace - 20f, y + 10f, textPaint.apply { textAlign = Paint.Align.RIGHT })
+            canvas.drawText(
+                "${(stepValue * i).toInt()}",
+                yAxisSpace - 20f,
+                y + 10f,
+                textPaint.apply { textAlign = Paint.Align.RIGHT }
+            )
             canvas.drawLine(yAxisSpace, y, width, y, gridPaint)
         }
 
@@ -143,7 +155,6 @@ class MonthsChartView @JvmOverloads constructor(
     private fun drawBarChart(canvas: Canvas, columnWidth: Float, chartBottom: Float, drawingHeight: Float, viewHeight: Float) {
         textPaint.textAlign = Paint.Align.CENTER
 
-        // Gęstość pikseli potrzebna do wyliczenia rogu (odpowiada 6dp)
         val density = resources.displayMetrics.density
         val cornerRadius = 6f * density
 
@@ -152,17 +163,14 @@ class MonthsChartView @JvmOverloads constructor(
             val xCenter = yAxisSpace + (index * columnWidth) + (columnWidth / 2)
             val heightPercent = if (yAxisMax > 0) total / yAxisMax else 0f
 
-            // Wysokość min to 0.01f jak w spacer_top
             val targetHeight = drawingHeight * heightPercent.coerceAtLeast(0.01f)
             val currentHeight = targetHeight * animationProgress
 
             val topY = chartBottom - currentHeight
 
-            // Rysowanie zaokrąglonego prostokąta
             val rect = RectF(xCenter - (barWidth / 2), topY, xCenter + (barWidth / 2), chartBottom)
             canvas.drawRoundRect(rect, cornerRadius, cornerRadius, barPaint)
 
-            // Usunięcie zaokrąglenia z DOŁU słupka (nadrysowujemy zwykły prostokąt nad dolną częścią)
             if (currentHeight > cornerRadius) {
                 canvas.drawRect(
                     xCenter - (barWidth / 2),
@@ -173,16 +181,12 @@ class MonthsChartView @JvmOverloads constructor(
                 )
             }
 
-            // Animacja pojawiania się liczb (wznosząca się razem ze słupkiem + alpha)
             if (total > 0) {
                 valueTextPaint.color = Color.BLACK
-                // Przyciemnianie z postępem animacji
                 valueTextPaint.alpha = (255 * animationProgress).toInt()
-                // Wartość rysowana lekko nad górną krawędzią animowanego słupka
                 canvas.drawText("${total.toInt()} zł", xCenter, topY - 15f, valueTextPaint)
             }
 
-            // Etykiety miesięcy
             canvas.drawText(label, xCenter, viewHeight - 20f, textPaint)
         }
     }

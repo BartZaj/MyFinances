@@ -18,4 +18,5 @@
         android:id="@+id/nav_savings_goals"
         android:icon="@android:drawable/ic_menu_myplaces"
         android:title="Cele" />
+
 </menu>

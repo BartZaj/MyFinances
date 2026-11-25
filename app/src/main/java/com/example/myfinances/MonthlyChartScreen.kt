@@ -1,6 +1,5 @@
 package com.example.myfinances
 
-import android.content.Intent
 import android.os.Trace
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -38,7 +37,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.zIndex
 
 @Composable
-fun MonthlyChartScreen(expensesList: List<Expense>, isLoading: Boolean) {
+fun MonthlyChartScreen(expensesList: List<Expense>, isLoading: Boolean, onExpandableCategoriesClick: (String?) -> Unit) {
     DisposableEffect(Unit) {
         Trace.beginSection("ComposeScreen_CategoriesLauncher")
         onDispose { Trace.endSection() }
@@ -223,10 +222,7 @@ fun MonthlyChartScreen(expensesList: List<Expense>, isLoading: Boolean) {
                                                 xAxisLabelSpace = xAxisLabelSpace,
                                                 index = index, // Przekazujemy indeks do synchronizacji animacji
                                                 onClick = {
-                                                    val intent = Intent(context, ExpandableCategoriesActivity::class.java).apply {
-                                                        putExtra("SELECTED_MONTH", month.toString())
-                                                    }
-                                                    context.startActivity(intent)
+                                                    onExpandableCategoriesClick(month?.toString())
                                                 },
                                                 modifier = Modifier.weight(1f) // Usunięto stąd clickable (przeniesiony do środka)
                                             )

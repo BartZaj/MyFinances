@@ -1,6 +1,5 @@
 package com.example.myfinances
 
-import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Trace
@@ -8,7 +7,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
@@ -18,6 +19,7 @@ class MonthlyChartFragment : Fragment() {
     private lateinit var tvToggleBar: TextView
     private lateinit var tvToggleLine: TextView
     private var isBarChart = true
+    private var skipNextAnimation = false
 
     // Callback odświeżający dane
     private val dataListener: (List<Expense>) -> Unit = { expenses ->
@@ -36,16 +38,19 @@ class MonthlyChartFragment : Fragment() {
         tvToggleLine = view.findViewById(R.id.tvToggleLine)
 
         setupToggle()
+        applyToggleUi(animateChart = false)
+
+        chartView.setOnMonthClickListener { month ->
+            skipNextAnimation = true
+            findNavController().navigate(
+                R.id.expandableCategoriesXmlFragment,
+                bundleOf("SELECTED_MONTH" to month.toString()),
+                slideNavOptions
+            )
+        }
 
         // Podpinamy Listenera do MainXmlActivity
         (activity as? MainXmlActivity)?.addDataListener(dataListener)
-
-        chartView.setOnMonthClickListener { selectedMonth ->
-            val intent = Intent(requireContext(), ExpandableCategoriesXmlActivity::class.java).apply {
-                putExtra("SELECTED_MONTH", selectedMonth.toString())
-            }
-            startActivity(intent)
-        }
 
         Trace.endSection()
         return view
@@ -55,24 +60,31 @@ class MonthlyChartFragment : Fragment() {
         tvToggleBar.setOnClickListener {
             if (!isBarChart) {
                 isBarChart = true
-                tvToggleBar.setBackgroundResource(R.drawable.toggle_selected)
-                tvToggleBar.setTextColor(Color.WHITE)
-                tvToggleLine.setBackgroundColor(Color.TRANSPARENT)
-                tvToggleLine.setTextColor(Color.parseColor("#555555"))
-                chartView.setChartType(true)
+                applyToggleUi(animateChart = true)
             }
         }
 
         tvToggleLine.setOnClickListener {
             if (isBarChart) {
                 isBarChart = false
-                tvToggleLine.setBackgroundResource(R.drawable.toggle_selected)
-                tvToggleLine.setTextColor(Color.WHITE)
-                tvToggleBar.setBackgroundColor(Color.TRANSPARENT)
-                tvToggleBar.setTextColor(Color.parseColor("#555555"))
-                chartView.setChartType(false)
+                applyToggleUi(animateChart = true)
             }
         }
+    }
+
+    private fun applyToggleUi(animateChart: Boolean) {
+        if (isBarChart) {
+            tvToggleBar.setBackgroundResource(R.drawable.toggle_selected)
+            tvToggleBar.setTextColor(Color.WHITE)
+            tvToggleLine.setBackgroundColor(Color.TRANSPARENT)
+            tvToggleLine.setTextColor(Color.parseColor("#555555"))
+        } else {
+            tvToggleLine.setBackgroundResource(R.drawable.toggle_selected)
+            tvToggleLine.setTextColor(Color.WHITE)
+            tvToggleBar.setBackgroundColor(Color.TRANSPARENT)
+            tvToggleBar.setTextColor(Color.parseColor("#555555"))
+        }
+        chartView.setChartType(isBarChart, animate = animateChart)
     }
 
     private fun processExpensesForChart(expensesList: List<Expense>) {
@@ -87,7 +99,9 @@ class MonthlyChartFragment : Fragment() {
         }
 
         val rawMonths = last6Months.toList()
-        chartView.setData(chartData, rawMonths)
+        val shouldAnimate = !skipNextAnimation
+        skipNextAnimation = false
+        chartView.setData(chartData, rawMonths, animate = shouldAnimate)
     }
 
     override fun onDestroyView() {

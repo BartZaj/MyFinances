@@ -1,9 +1,5 @@
 package com.example.myfinances
 
-import android.content.Intent
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,104 +19,35 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myfinances.ui.theme.MyFinancesTheme
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
-class CategoryDetailsActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val categoryName = intent.getStringExtra("CATEGORY_NAME") ?: return
-
-        setContent {
-            MyFinancesTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    CategoryDetailsScreen(categoryName)
-                }
-            }
-        }
-    }
-}
-
 @Composable
-fun CategoryDetailsScreen(categoryName: String) {
-    var expensesList by remember { mutableStateOf<List<Expense>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    DisposableEffect(categoryName) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            isLoading = false
-            return@DisposableEffect onDispose {}
-        }
-
-        val databaseRef =
-            FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val currentMonth = LocalDate.now().monthValue
-                val currentYear = LocalDate.now().year
-
-                val fetchedExpenses = mutableListOf<Expense>()
-                for (child in snapshot.children) {
-                    val catStr = child.child("category").getValue(String::class.java) ?: ""
-
-                    if (catStr == categoryName) {
-                        val id = child.key ?: ""
-                        val name = child.child("name").getValue(String::class.java) ?: ""
-                        val amount =
-                            child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                        val dateStr =
-                            child.child("date").getValue(String::class.java) ?: LocalDate.now()
-                                .toString()
-
-                        val date = LocalDate.parse(dateStr)
-
-                        // FILTROWANIE: Bierzemy pod uwagę tylko wydatki z bieżącego miesiąca i roku
-                        if (date.monthValue == currentMonth && date.year == currentYear) {
-                            fetchedExpenses.add(
-                                Expense(
-                                    id,
-                                    name,
-                                    amount,
-                                    date,
-                                    ExpenseCategory.valueOf(catStr)
-                                )
-                            )
-                        }
-                    }
-                }
-
-                expensesList = fetchedExpenses.sortedByDescending { it.amount }
-                isLoading = false
+fun CategoryDetailsScreen(
+    categoryName: String,
+    expensesList: List<Expense>,
+    isLoading: Boolean,
+    onExpenseClick: (String) -> Unit
+) {
+    val filteredExpenses = remember(expensesList, categoryName) {
+        val currentMonth = LocalDate.now().monthValue
+        val currentYear = LocalDate.now().year
+        expensesList
+            .filter {
+                it.category.name == categoryName &&
+                        it.date.monthValue == currentMonth &&
+                        it.date.year == currentYear
             }
-
-            override fun onCancelled(error: DatabaseError) {
-                isLoading = false
-            }
-        }
-        databaseRef.addValueEventListener(listener)
-        onDispose { databaseRef.removeEventListener(listener) }
+            .sortedByDescending { it.amount }
     }
 
-    // Dynamiczne generowanie kolorów (przelicza się ponownie tylko gdy zmieni się expensesList)
-    val dynamicColors = remember(expensesList) {
-        expensesList.indices.map { index ->
-            // Używamy Złotego Kąta, nasycenia 0.7 i jasności 0.9 dla ładnych kolorów
+    val dynamicColors = remember(filteredExpenses) {
+        filteredExpenses.indices.map { index ->
             val hue = (index * 137.508f) % 360f
             Color.hsv(hue = hue, saturation = 0.7f, value = 0.9f)
         }
@@ -131,37 +58,32 @@ fun CategoryDetailsScreen(categoryName: String) {
             CircularProgressIndicator()
         }
     } else {
-        // Obliczamy sumę wcześniej, bo wyświetlamy ją na samej górze
-        val totalSum = expensesList.sumOf { it.amount.toDouble() }.toFloat()
+        val totalSum = filteredExpenses.sumOf { it.amount.toDouble() }.toFloat()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .padding(16.dp)
-            // Domyślnie elementy układają się do lewej krawędzi (jak w LinearLayout vertical bez gravity)
         ) {
-
-            // 1. NAGŁÓWEK (odpowiednik tvCategoryTitle)
             Text(
                 text = "Szczegóły: $categoryName",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
             )
 
-            // 2. SUMA (odpowiednik tvTotalSum)
             Text(
                 text = String.format("Razem: %.2f zł", totalSum),
                 fontSize = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
             )
 
-            // 3. WYKRES (odpowiednik pieChartContainer) - centrujemy go horyzontalnie
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .align(Alignment.CenterHorizontally) // wyśrodkowanie tylko wykresu
-                    .padding(bottom = 16.dp) // Padding dodany PRZED size, aby działał jako margines zewnętrzny
-                    .size(250.dp)            // Dzięki temu Canvas ma wewnątrz idealne 250x250 dp
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 16.dp)
+                    .size(250.dp)
             ) {
                 var rotationAngle by remember { mutableFloatStateOf(0f) }
 
@@ -213,7 +135,7 @@ fun CategoryDetailsScreen(categoryName: String) {
                     val arcSize = Size(size.width - strokeWidthPx, size.height - strokeWidthPx)
                     val radius = (size.width - strokeWidthPx) / 2f
 
-                    expensesList.forEachIndexed { index, expense ->
+                    filteredExpenses.forEachIndexed { index, expense ->
                         val sweepAngle =
                             if (totalSum > 0) (expense.amount / totalSum) * 360f else 0f
 
@@ -251,17 +173,14 @@ fun CategoryDetailsScreen(categoryName: String) {
                         startAngle += sweepAngle
                     }
                 }
-            } // Koniec Box z wykresem
-
-            // 4. LISTA (odpowiednik ScrollView -> legendContainer)
-            val context = LocalContext.current
+            }
 
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f) // zajmuje resztę dostępnego miejsca, co pozwala na przewijanie (jak w ScrollView)
+                    .weight(1f)
             ) {
-                items(expensesList.withIndex().toList()) { (index, expense) ->
+                items(filteredExpenses.withIndex().toList()) { (index, expense) ->
                     val percentage =
                         if (totalSum > 0) ((expense.amount / totalSum) * 100).toInt() else 0
                     val itemColor = dynamicColors[index]
@@ -269,12 +188,7 @@ fun CategoryDetailsScreen(categoryName: String) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
-                                    putExtra("EXTRA_ID", expense.id)
-                                }
-                                context.startActivity(intent)
-                            }
+                            .clickable { onExpenseClick(expense.id) }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween

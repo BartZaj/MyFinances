@@ -1,9 +1,6 @@
 package com.example.myfinances
 
-import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,12 +37,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myfinances.ui.theme.MyFinancesTheme
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -65,99 +58,28 @@ private fun detailCategoryIcon(category: ExpenseCategory): ImageVector =
         else -> Icons.Default.List
     }
 
-class ExpenseDetailActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        val expenseId = intent.getStringExtra("EXTRA_ID")
-        if (expenseId.isNullOrBlank()) {
-            finish()
-            return
-        }
-
-        setContent {
-            MyFinancesTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color.White
-                ) {
-                    ExpenseDetailScreen(
-                        expenseId = expenseId,
-                        onBack = { finish() }
-                    )
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseDetailScreen(
     expenseId: String,
+    expensesList: List<Expense>,
+    isLoading: Boolean,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var expense by remember { mutableStateOf<Expense?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    val expense = remember(expensesList, expenseId) {
+        expensesList.find { it.id == expenseId }
+    }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
 
-    // Nasłuchiwanie konkretnego wydatku po ID w Firebase
-    DisposableEffect(expenseId) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            isLoading = false
-            return@DisposableEffect onDispose {}
-        }
-
-        val expenseRef = FirebaseDatabase.getInstance()
-            .getReference("Users")
-            .child(uid)
-            .child("Expenses")
-            .child(expenseId)
-
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    val name = snapshot.child("name").getValue(String::class.java) ?: ""
-                    val amount = snapshot.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                    val dateStr = snapshot.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                    val catStr = snapshot.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
-
-                    val category = try {
-                        ExpenseCategory.valueOf(catStr)
-                    } catch (_: IllegalArgumentException) {
-                        ExpenseCategory.OTHER
-                    }
-
-                    expense = Expense(
-                        id = expenseId,
-                        name = name,
-                        amount = amount,
-                        date = LocalDate.parse(dateStr),
-                        category = category
-                    )
-                } else {
-                    expense = null
-                }
-                isLoading = false
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                isLoading = false
-            }
-        }
-
-        expenseRef.addValueEventListener(listener)
-        onDispose { expenseRef.removeEventListener(listener) }
-    }
-
     Scaffold(
         containerColor = Color.White,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0.dp),
                 title = {
                     Text(
                         text = "Szczegóły wydatku",
@@ -208,8 +130,7 @@ fun ExpenseDetailScreen(
             }
 
             else -> {
-                val currentExpense = expense!!
-                val baseColor = Color(currentExpense.category.color.toArgb())
+                val baseColor = Color(expense.category.color.toArgb())
 
                 Column(
                     modifier = Modifier
@@ -219,9 +140,6 @@ fun ExpenseDetailScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // ==========================================
-                    // GŁÓWNA KARTA WYDATKU (W STYLU LISTY I KATEGORII)
-                    // ==========================================
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -238,8 +156,8 @@ fun ExpenseDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = detailCategoryIcon(currentExpense.category),
-                                contentDescription = currentExpense.category.displayName,
+                                imageVector = detailCategoryIcon(expense.category),
+                                contentDescription = expense.category.displayName,
                                 modifier = Modifier.size(34.dp),
                                 tint = Color.White
                             )
@@ -248,7 +166,7 @@ fun ExpenseDetailScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = currentExpense.name,
+                            text = expense.name,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black,
@@ -258,16 +176,13 @@ fun ExpenseDetailScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = String.format("- %.2f zł", currentExpense.amount),
+                            text = String.format("- %.2f zł", expense.amount),
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Bold,
                             color = baseColor
                         )
                     }
 
-                    // ==========================================
-                    // KARTA ZE SZCZEGÓŁAMI (DATA I KATEGORIA)
-                    // ==========================================
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -295,7 +210,7 @@ fun ExpenseDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = currentExpense.category.displayName,
+                                    text = expense.category.displayName,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = baseColor
@@ -324,7 +239,7 @@ fun ExpenseDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = currentExpense.date.format(detailDateFormatter),
+                                    text = expense.date.format(detailDateFormatter),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color.Black
@@ -335,9 +250,6 @@ fun ExpenseDetailScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // ==========================================
-                    // PRZYCISKI AKCJI (USUŃ / EDYTUJ)
-                    // ==========================================
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -386,12 +298,9 @@ fun ExpenseDetailScreen(
                     }
                 }
 
-                // ==========================================
-                // DIALOG EDYCJI (W STYLU AddExpenseDialog)
-                // ==========================================
                 if (showEditDialog) {
                     EditExpenseDialog(
-                        expense = currentExpense,
+                        expense = expense,
                         onDismiss = { showEditDialog = false },
                         onSave = { newName, newAmount, newDate, newCategory ->
                             val uid = FirebaseAuth.getInstance().currentUser?.uid
@@ -406,7 +315,7 @@ fun ExpenseDetailScreen(
                                     .getReference("Users")
                                     .child(uid)
                                     .child("Expenses")
-                                    .child(currentExpense.id)
+                                    .child(expense.id)
                                     .updateChildren(updatedData)
                                     .addOnSuccessListener {
                                         Toast.makeText(context, "Zapisano zmiany", Toast.LENGTH_SHORT).show()
@@ -417,15 +326,12 @@ fun ExpenseDetailScreen(
                     )
                 }
 
-                // ==========================================
-                // DIALOG POTWIERDZENIA USUNIĘCIA
-                // ==========================================
                 if (showDeleteDialog) {
                     AlertDialog(
                         onDismissRequest = { showDeleteDialog = false },
                         title = { Text("Usuń wydatek") },
                         text = {
-                            Text("Czy na pewno chcesz usunąć wydatek „${currentExpense.name}”? Tej operacji nie można cofnąć.")
+                            Text("Czy na pewno chcesz usunąć wydatek „${expense.name}”? Tej operacji nie można cofnąć.")
                         },
                         confirmButton = {
                             Button(
@@ -438,7 +344,7 @@ fun ExpenseDetailScreen(
                                             .getReference("Users")
                                             .child(uid)
                                             .child("Expenses")
-                                            .child(currentExpense.id)
+                                            .child(expense.id)
                                             .removeValue()
                                             .addOnSuccessListener {
                                                 Toast.makeText(context, "Usunięto wydatek", Toast.LENGTH_SHORT).show()
@@ -478,7 +384,6 @@ fun EditExpenseDialog(
 ) {
     var name by remember(expense) { mutableStateOf(expense.name) }
     var amountText by remember(expense) {
-        // Locale.US zapewnia kropkę dziesiętną wymaganą przez regex i toFloatOrNull()
         val formatted = if (expense.amount % 1f == 0f) {
             expense.amount.toInt().toString()
         } else {

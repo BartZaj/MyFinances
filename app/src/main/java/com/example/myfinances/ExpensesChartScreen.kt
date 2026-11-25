@@ -1,17 +1,29 @@
 package com.example.myfinances
 
-import android.content.Intent
 import android.os.Trace
-import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,13 +34,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.myfinances.Expense
+import com.example.myfinances.ExpenseCategory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -37,28 +52,15 @@ import com.google.firebase.database.ValueEventListener
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import android.widget.Toast
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpensesScreen(
     expensesList: List<Expense>,
-    isLoading: Boolean
+    isLoading: Boolean,
+    initialBarFractions: Map<ExpenseCategory, Float>? = null,
+    onInitialBarFractionsConsumed: () -> Unit = {},
+    onCategoryClick: (categoryName: String, currentBarFractions: Map<ExpenseCategory, Float>) -> Unit
 ) {
     DisposableEffect(Unit) {
         Trace.beginSection("ComposeScreen_ExpensesChart")
@@ -67,7 +69,14 @@ fun ExpensesScreen(
         }
     }
 
-    val context = LocalContext.current
+    // Zapamiętujemy stan początkowy przy wejściu i od razu czyścimy go w hoście
+    val startFractions = remember { initialBarFractions }
+    LaunchedEffect(Unit) {
+        if (initialBarFractions != null) {
+            onInitialBarFractionsConsumed()
+        }
+    }
+
     var showAddDialog by remember { mutableStateOf(false) }
 
     // Stan limitów z Firebase oraz aktualnie edytowanej kategorii
@@ -145,6 +154,13 @@ fun ExpensesScreen(
                 val categories = remember { ExpenseCategory.values() }
                 val pagerState = rememberPagerState(pageCount = { categories.size })
 
+                val currentBarFractions = remember(categoryTotals, yAxisMax) {
+                    categories.associateWith { category ->
+                        val totalForCategory = categoryTotals[category] ?: 0f
+                        if (yAxisMax > 0) totalForCategory / yAxisMax else 0f
+                    }
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -213,12 +229,14 @@ fun ExpensesScreen(
                             ) {
                                 categories.forEach { category ->
                                     val totalForCategory = categoryTotals[category] ?: 0f
-                                    val heightPercentage = if (yAxisMax > 0) totalForCategory / yAxisMax else 0f
+                                    val heightPercentage = currentBarFractions[category] ?: 0f
+                                    val initialFraction = startFractions?.get(category) ?: 0f
 
                                     BarChartItem(
                                         category = category,
                                         total = totalForCategory,
                                         heightPercentage = heightPercentage,
+                                        initialFraction = initialFraction,
                                         xAxisLabelSpace = xAxisLabelSpace,
                                         modifier = Modifier
                                             .weight(1f)
@@ -226,10 +244,7 @@ fun ExpensesScreen(
                                                 interactionSource = remember { MutableInteractionSource() },
                                                 indication = null
                                             ) {
-                                                val intent = Intent(context, CategoryDetailsActivity::class.java).apply {
-                                                    putExtra("CATEGORY_NAME", category.name)
-                                                }
-                                                context.startActivity(intent)
+                                                onCategoryClick(category.name, currentBarFractions)
                                             }
                                     )
                                 }
@@ -293,7 +308,6 @@ fun ExpensesScreen(
         )
     }
 
-    // Wyświetlanie BottomSheet – tutaj przełączasz między Wersją 1 a Wersją 2
     editingCategory?.let { category ->
         val currentLimit = categoryLimits[category] ?: 0f
         val saveLimit: (Float) -> Unit = { newLimit ->
@@ -308,8 +322,6 @@ fun ExpensesScreen(
             }
             editingCategory = null
         }
-
-        // WERSJA 2: Arkusz idzie w górę razem z klawiaturą (odkomentuj i zakomentuj Wersję 1, żeby przetestować)
 
         EditLimitBottomSheetWithKeyboard(
             category = category,
@@ -472,13 +484,14 @@ fun BarChartItem(
     category: ExpenseCategory,
     total: Float,
     heightPercentage: Float,
+    initialFraction: Float,
     xAxisLabelSpace: Dp,
     modifier: Modifier = Modifier
 ) {
     var startAnimation by remember { mutableStateOf(false) }
 
     val animatedFraction by animateFloatAsState(
-        targetValue = if (startAnimation) heightPercentage else 0f,
+        targetValue = if (startAnimation) heightPercentage else initialFraction,
         animationSpec = tween(
             durationMillis = 1200,
             delayMillis = 100,
@@ -565,7 +578,7 @@ fun BarChartItem(
             Icon(
                 imageVector = categoryIcon,
                 contentDescription = category.displayName,
-                tint = category.color, // Ikona w kolorze kategorii
+                tint = category.color,
                 modifier = Modifier
                     .padding(top = 8.dp)
                     .size(24.dp)
@@ -573,6 +586,7 @@ fun BarChartItem(
         }
     }
 }
+
 @Composable
 fun CategoryLimitCard(
     category: ExpenseCategory,

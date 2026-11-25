@@ -1,9 +1,5 @@
 package com.example.myfinances
 
-import android.content.Intent
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,18 +7,18 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,89 +27,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myfinances.ui.theme.MyFinancesTheme
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
-import java.time.LocalDate
 import java.time.YearMonth
 
-class ExpandableCategoriesActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Odbieramy wybrany miesiąc z Intencji (jeśli został przekazany)
-        val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
-
-        setContent {
-            MyFinancesTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color.White
-                ) {
-                    ExpandableCategoriesScreen(selectedMonthStr = selectedMonthStr)
-                }
-            }
-        }
-    }
-}
-
 @Composable
-fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
-    var groupedExpenses by remember {mutableStateOf<Map<ExpenseCategory, List<Expense>>>(emptyMap()) }
-    var isLoading by remember { mutableStateOf(true) }
+fun ExpandableCategoriesScreen(
+    selectedMonthStr: String?,
+    expensesList: List<Expense>,
+    isLoading: Boolean,
+    onExpenseClick: (String) -> Unit
+) {
     var expandedCategoryNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
-    // Konwersja odebranego Stringa (np. "2026-11") na obiekt YearMonth
     val targetMonth = remember(selectedMonthStr) {
         selectedMonthStr?.let { YearMonth.parse(it) }
     }
 
-    DisposableEffect(Unit) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            isLoading = false
-            return@DisposableEffect onDispose {}
-        }
-
-        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val fetchedExpenses = mutableListOf<Expense>()
-                for (child in snapshot.children) {
-                    val id = child.key ?: ""
-                    val name = child.child("name").getValue(String::class.java) ?: ""
-                    val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                    val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                    val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
-
-                    val expenseDate = LocalDate.parse(dateStr)
-                    // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
-                    if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
-                        fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
-                    }
-                }
-
-                groupedExpenses = fetchedExpenses.groupBy { it.category }
-                isLoading = false
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                isLoading = false
-            }
-        }
-        databaseRef.addValueEventListener(listener)
-        onDispose { databaseRef.removeEventListener(listener) }
+    val groupedExpenses = remember(expensesList, targetMonth) {
+        expensesList
+            .filter { targetMonth == null || YearMonth.from(it.date) == targetMonth }
+            .groupBy { it.category }
     }
 
     if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator()
         }
     } else {
@@ -126,7 +70,9 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -134,7 +80,6 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
                 items = sortedCategories,
                 key = { category -> category.name }
             ) { category ->
-                // Sortowanie wydatków po dacie malejąco (od najnowszego do najstarszego)
                 val expenses = groupedExpenses[category]?.sortedWith(
                     compareByDescending<Expense> { it.date }
                         .thenByDescending { it.id }
@@ -151,7 +96,8 @@ fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
                         } else {
                             expandedCategoryNames - category.name
                         }
-                    }
+                    },
+                    onExpenseClick = onExpenseClick
                 )
             }
         }
@@ -163,16 +109,14 @@ fun ExpandableCategoryCard(
     category: ExpenseCategory,
     expenses: List<Expense>,
     isExpanded: Boolean,
-    onExpandChange: (Boolean) -> Unit
+    onExpandChange: (Boolean) -> Unit,
+    onExpenseClick: (String) -> Unit
 ) {
-    val context = LocalContext.current
-
     val totalSum = remember(expenses) {
         expenses.sumOf { it.amount.toDouble() }.toFloat()
     }
 
     val interactionSource = remember { MutableInteractionSource() }
-
     val baseColor = Color(category.color.toArgb())
     val backgroundColor = baseColor.copy(alpha = 0.18f)
 
@@ -183,7 +127,6 @@ fun ExpandableCategoryCard(
             .background(backgroundColor)
             .animateContentSize()
     ) {
-        // Nagłówek
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -202,13 +145,12 @@ fun ExpandableCategoryCard(
                     "FOOD" -> Icons.Default.ShoppingCart
                     "TRANSPORT" -> Icons.Default.DirectionsCar
                     "ENTERTAINMENT" -> Icons.Default.MusicNote
-                    "CLOTHING" -> Icons.Default.Checkroom // <--- NOWA
+                    "CLOTHING" -> Icons.Default.Checkroom
                     "HEALTH" -> Icons.Default.MedicalServices
                     "BILLS" -> Icons.Default.ReceiptLong
                     else -> Icons.Default.List
                 }
 
-                // Kolorowe kółko z białą ikoną
                 Box(
                     modifier = Modifier
                         .size(44.dp)
@@ -259,18 +201,12 @@ fun ExpandableCategoryCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
-                                    putExtra("EXTRA_ID", expense.id)
-                                }
-                                context.startActivity(intent)
-                            }
+                            .clickable { onExpenseClick(expense.id) }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Kolorowa kropka przy nazwie wydatku
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
@@ -279,7 +215,6 @@ fun ExpandableCategoryCard(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            // ZMIANA TUTAJ: Kolumna dla nazwy i daty (odpowiednik XML textCol z LinearLayout vertical)
                             Column {
                                 Text(
                                     text = expense.name,

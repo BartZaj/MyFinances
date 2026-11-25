@@ -1,7 +1,5 @@
 package com.example.myfinances
 
-import android.animation.ValueAnimator
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -18,84 +16,104 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
+import androidx.core.os.bundleOf
+import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.*
-import java.time.LocalDate
 import java.time.YearMonth
 
-class ExpandableCategoriesXmlActivity : AppCompatActivity() {
+class ExpandableCategoriesXmlFragment : Fragment() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
 
     private var targetMonth: YearMonth? = null
+    private val expandedCategories = mutableSetOf<ExpenseCategory>()
+
+    private val dataListener: (List<Expense>) -> Unit = { allExpenses ->
+        if (isAdded) {
+            val filtered = allExpenses.filter {
+                targetMonth == null || YearMonth.from(it.date) == targetMonth
+            }
+            val grouped = filtered.groupBy { it.category }
+
+            progressBar.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
+
+            val currentAdapter = recyclerView.adapter as? CategoryExpandableAdapter
+            if (currentAdapter == null) {
+                recyclerView.adapter = CategoryExpandableAdapter(grouped, expandedCategories) { expenseId ->
+                    findNavController().navigate(
+                        R.id.expenseDetailXmlFragment,
+                        bundleOf("EXTRA_ID" to expenseId),
+                        slideNavOptions
+                    )
+                }
+            } else {
+                currentAdapter.updateData(grouped)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_expandable_categories)
-
-        recyclerView = findViewById(R.id.recyclerView)
-        progressBar = findViewById(R.id.progressBar)
-        recyclerView.layoutManager = LinearLayoutManager(this)
-
-        val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
-        targetMonth = selectedMonthStr?.let { YearMonth.parse(it) }
-
-        loadData()
+        savedInstanceState?.getStringArrayList("EXPANDED_CATEGORIES")?.forEach { name ->
+            runCatching { ExpenseCategory.valueOf(name) }.getOrNull()?.let {
+                expandedCategories.add(it)
+            }
+        }
     }
 
-    private fun loadData() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) {
-            progressBar.visibility = View.GONE
-            return
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putStringArrayList(
+            "EXPANDED_CATEGORIES",
+            ArrayList(expandedCategories.map { it.name })
+        )
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val view = inflater.inflate(R.layout.activity_expandable_categories, container, false)
+
+        recyclerView = view.findViewById(R.id.recyclerView)
+        progressBar = view.findViewById(R.id.progressBar)
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+
+        val selectedMonthStr = arguments?.getString("SELECTED_MONTH")
+        targetMonth = selectedMonthStr?.let { YearMonth.parse(it) }
+
+        return view
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        val mainActivity = activity as? MainXmlActivity
+        if (mainActivity?.isDataLoaded == false) {
+            progressBar.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
         }
-        val databaseRef = FirebaseDatabase.getInstance().getReference("Users").child(uid).child("Expenses")
+        mainActivity?.addDataListener(dataListener)
+    }
 
-        databaseRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val fetchedExpenses = mutableListOf<Expense>()
-                for (child in snapshot.children) {
-                    val id = child.key ?: ""
-                    val name = child.child("name").getValue(String::class.java) ?: ""
-                    val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
-                    val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
-                    val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
-
-                    val expenseDate = LocalDate.parse(dateStr)
-
-                    // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
-                    if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
-                        fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
-                    }
-                }
-
-                val grouped = fetchedExpenses.groupBy { it.category }
-
-                progressBar.visibility = View.GONE
-                recyclerView.visibility = View.VISIBLE
-                val currentAdapter = recyclerView.adapter as? CategoryExpandableAdapter
-                if (currentAdapter == null) {
-                    recyclerView.adapter = CategoryExpandableAdapter(grouped)
-                } else {
-                    currentAdapter.updateData(grouped)
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                progressBar.visibility = View.GONE
-            }
-        })
+    override fun onDestroyView() {
+        super.onDestroyView()
+        (activity as? MainXmlActivity)?.removeDataListener(dataListener)
     }
 }
 
-class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
-    RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
+class CategoryExpandableAdapter(
+    private var groupedExpenses: Map<ExpenseCategory, List<Expense>>,
+    private val expandedCategories: MutableSet<ExpenseCategory>,
+    private val onExpenseClick: (String) -> Unit
+) : RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
     private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "CLOTHING", "HEALTH", "OTHER")
 
@@ -107,7 +125,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
     }
 
     private var categories = sortCategories(groupedExpenses.keys)
-    private val expandedCategories = mutableSetOf<ExpenseCategory>()
 
     fun updateData(newGroupedExpenses: Map<ExpenseCategory, List<Expense>>) {
         this.groupedExpenses = newGroupedExpenses
@@ -153,27 +170,22 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
         val baseColor = category.color.toArgb()
         val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, (255 * 0.18).toInt())
 
-        // Główny kontener – zaokrąglone tło z przezroczystością (0.18 alpha)
         val cardShape = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = 64f // Mocne zaokrąglenie, by imitowało 24.dp
+            cornerRadius = 64f
             setColor(composeLikeBackgroundColor)
         }
         holder.cardLayout.background = cardShape
 
-        // Kółko z ikoną (pełen kolor)
         val circleShape = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(baseColor)
         }
         holder.iconCircleBackground.background = circleShape
 
-        // Teksty i strzałka również w pełnym kolorze
         holder.tvCategoryName.setTextColor(baseColor)
         holder.tvCategoryTotal.setTextColor(baseColor)
         holder.ivArrow.setColorFilter(baseColor)
-
-        // Linia separatora o nieco ciemniejszej alfie koloru bazowego
 
         val iconRes = when (category.name) {
             "FOOD" -> R.drawable.baseline_directions_car_24
@@ -185,7 +197,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             else -> R.drawable.baseline_directions_car_24
         }
         holder.iconIndicator.setImageResource(iconRes)
-        // Ikona jest biała (w kółku)
         holder.iconIndicator.setColorFilter(Color.WHITE)
 
         holder.expandableContent.removeAllViews()
@@ -209,7 +220,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                 isFocusable = true
             }
 
-            // Zawijacz na kolorową kropeczkę obok nazwy wydatku
             val leftLayout = LinearLayout(holder.itemView.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
@@ -218,7 +228,7 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
             val expenseDot = View(holder.itemView.context).apply {
                 layoutParams = LinearLayout.LayoutParams(24, 24).apply {
-                    setMargins(0, 0, 32, 0) // Odstęp w prawo
+                    setMargins(0, 0, 32, 0)
                 }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
@@ -226,10 +236,12 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                 }
             }
 
-            // Kolumna dla nazwy i daty
             val textCol = LinearLayout(holder.itemView.context).apply {
                 orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
             }
 
             val tvName = TextView(holder.itemView.context).apply {
@@ -260,11 +272,7 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             row.addView(tvAmount)
 
             row.setOnClickListener {
-                val context = holder.itemView.context
-                val intent = Intent(context, ExpenseDetailXMLActivity::class.java).apply {
-                    putExtra("EXTRA_ID", expense.id)
-                }
-                context.startActivity(intent)
+                onExpenseClick(expense.id)
             }
 
             holder.expandableContent.addView(row)

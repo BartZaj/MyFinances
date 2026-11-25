@@ -62,6 +62,20 @@ class MainXmlActivity : AppCompatActivity() {
 
         bottomNav.setupWithNavController(navController)
 
+        val detailDestinations = setOf(
+            R.id.categoryDetailsXmlFragment,
+            R.id.expandableCategoriesXmlFragment,
+            R.id.expenseDetailXmlFragment
+        )
+
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            bottomNav.visibility = if (destination.id in detailDestinations) {
+                android.view.View.GONE
+            } else {
+                android.view.View.VISIBLE
+            }
+        }
+
         fetchDataFromFirebase()
         fetchGoalsFromFirebase()
     }
@@ -177,5 +191,14 @@ class MainXmlActivity : AppCompatActivity() {
         super.onDestroy()
         valueEventListener?.let { databaseRef?.removeEventListener(it) }
         goalsEventListener?.let { goalsRef?.removeEventListener(it) }
+    }
+}
+
+val slideNavOptions = androidx.navigation.navOptions {
+    anim {
+        enter = R.anim.slide_in_right
+        exit = R.anim.slide_out_left
+        popEnter = R.anim.slide_in_left
+        popExit = R.anim.slide_out_right
     }
 }

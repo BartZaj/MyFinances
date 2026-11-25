@@ -20,7 +20,7 @@ class CategoriesChartView @JvmOverloads constructor(
 
     // Zapamiętywanie poprzedniego stanu do animowania
     private var previousData = mapOf<ExpenseCategory, Float>()
-    private var previousYAxisMax = 100f // DODANO: Zapamiętywanie poprzedniej skali osi Y
+    private var previousYAxisMax = 100f
 
     private var yAxisMax = 100f
     private var animationProgress = 0f
@@ -58,23 +58,40 @@ class CategoriesChartView @JvmOverloads constructor(
 
     private val categoryIconsCache = mutableMapOf<ExpenseCategory, Drawable>()
 
-    fun setData(data: List<Pair<ExpenseCategory, Float>>) {
-        // Zapisujemy stary stan, żeby wiedzieć, który słupek ma urosnąć i czy skala się zmienia
-        previousData = this.chartData.toMap()
-        previousYAxisMax = this.yAxisMax
+    private fun calculateYAxisMax(maxTotal: Float): Float = when {
+        maxTotal >= 1000f -> ((maxTotal / 500).toInt() + 1) * 500f
+        maxTotal > 0f -> ((maxTotal / 100).toInt() + 1) * 100f
+        else -> 100f
+    }
+
+    fun setData(
+        data: List<Pair<ExpenseCategory, Float>>,
+        animate: Boolean = true,
+        initialPreviousData: Map<ExpenseCategory, Float>? = null
+    ) {
+        if (initialPreviousData != null) {
+            previousData = initialPreviousData
+            val prevMax = initialPreviousData.values.maxOrNull() ?: 0f
+            previousYAxisMax = calculateYAxisMax(prevMax)
+        } else {
+            previousData = this.chartData.toMap()
+            previousYAxisMax = this.yAxisMax
+        }
 
         this.chartData = data
         val maxTotal = chartData.maxOfOrNull { it.second } ?: 0f
-
-        // Dynamiczne wyliczanie siatki (kroki Y)
-        yAxisMax = when {
-            maxTotal >= 1000f -> ((maxTotal / 500).toInt() + 1) * 500f
-            maxTotal > 0f -> ((maxTotal / 100).toInt() + 1) * 100f
-            else -> 100f
-        }
+        yAxisMax = calculateYAxisMax(maxTotal)
 
         loadIcons()
-        startAnimation()
+        if (animate) {
+            startAnimation()
+        } else {
+            animator?.cancel()
+            previousData = data.toMap()
+            previousYAxisMax = yAxisMax
+            animationProgress = 1f
+            invalidate()
+        }
     }
 
     fun setOnCategoryClickListener(listener: (ExpenseCategory) -> Unit) {
@@ -145,11 +162,10 @@ class CategoriesChartView @JvmOverloads constructor(
             val (category, total) = pair
             val oldTotal = previousData[category] ?: 0f
 
-            // PŁYNNA INTERPOLACJA WYSOKOŚCI (efekt z Compose)
+            // Płynna interpolacja wysokości (ze starej skali na nową)
             val oldHeightPercent = if (previousYAxisMax > 0) oldTotal / previousYAxisMax else 0f
             val newHeightPercent = if (yAxisMax > 0) total / yAxisMax else 0f
 
-            // Animacja przechodzi płynnie ze starego ułamka wysokości na nowy ułamek wysokości
             val currentHeightPercent = oldHeightPercent + (newHeightPercent - oldHeightPercent) * animationProgress
 
             val xCenter = yAxisSpace + (index * columnWidth) + (columnWidth / 2)

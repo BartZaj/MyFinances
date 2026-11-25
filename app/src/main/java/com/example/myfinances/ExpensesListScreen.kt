@@ -1,6 +1,5 @@
 package com.example.myfinances
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,7 +68,8 @@ private fun categoryIconFor(category: ExpenseCategory): ImageVector =
 @Composable
 fun ExpensesListScreen(
     expensesList: List<Expense>,
-    isLoading: Boolean
+    isLoading: Boolean,
+    onExpenseClick: (String) -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -244,10 +244,7 @@ fun ExpensesListScreen(
                                 focusManager.clearFocus()
                                 keyboardController?.hide()
 
-                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
-                                    putExtra("EXTRA_ID", expense.id)
-                                }
-                                context.startActivity(intent)
+                                onExpenseClick(expense.id)
                             }
                         )
                     }

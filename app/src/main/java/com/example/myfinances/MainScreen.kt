@@ -1,5 +1,11 @@
 package com.example.myfinances
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Flag
@@ -17,10 +23,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -35,12 +43,39 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object SavingsGoals : Screen("savings_goals", "Cele", Icons.Filled.Flag)
 }
 
+object DetailRoutes {
+    const val CATEGORY_DETAILS = "category_details/{categoryName}"
+    const val EXPANDABLE_CATEGORIES = "expandable_categories?selectedMonth={selectedMonth}"
+    const val EXPENSE_DETAIL = "expense_detail/{expenseId}"
+
+    fun categoryDetails(categoryName: String) = "category_details/$categoryName"
+    fun expandableCategories(selectedMonth: String?) =
+        if (selectedMonth != null) "expandable_categories?selectedMonth=$selectedMonth"
+        else "expandable_categories"
+    fun expenseDetail(expenseId: String) = "expense_detail/$expenseId"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreenHost() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    val bottomBarItems = listOf(
+        Screen.Chart,
+        Screen.Categories,
+        Screen.ExpensesList,
+        Screen.SavingsGoals
+    )
+    val detailRoutes = remember {
+        setOf(
+            DetailRoutes.CATEGORY_DETAILS,
+            DetailRoutes.EXPANDABLE_CATEGORIES,
+            DetailRoutes.EXPENSE_DETAIL
+        )
+    }
+    val showBottomBar = bottomBarItems.any { it.route == currentRoute }
 
     // Stany dla wydatków
     var expensesList by remember { mutableStateOf<List<Expense>>(emptyList()) }
@@ -49,6 +84,9 @@ fun MainScreenHost() {
     // Stany dla celów oszczędnościowych
     var goalsList by remember { mutableStateOf<List<SavingsGoal>>(emptyList()) }
     var isGoalsLoading by remember { mutableStateOf(true) }
+
+    // Zapamiętane wysokości słupków przed przejściem do szczegółów kategorii
+    var savedChartFractions by remember { mutableStateOf<Map<ExpenseCategory, Float>?>(null) }
 
     // Pobieranie wydatków i celów z Firebase raz dla całej sesji
     DisposableEffect(Unit) {
@@ -151,29 +189,25 @@ fun MainScreenHost() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val items = listOf(
-                    Screen.Chart,
-                    Screen.Categories,
-                    Screen.ExpensesList,
-                    Screen.SavingsGoals
-                )
-                items.forEach { screen ->
-                    CompositionLocalProvider(LocalRippleConfiguration provides null) {
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title) },
-                            selected = currentRoute == screen.route,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+            if (showBottomBar) {
+                NavigationBar {
+                    bottomBarItems.forEach { screen ->
+                        CompositionLocalProvider(LocalRippleConfiguration provides null) {
+                            NavigationBarItem(
+                                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                label = { Text(screen.title) },
+                                selected = currentRoute == screen.route,
+                                onClick = {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -184,29 +218,129 @@ fun MainScreenHost() {
             startDestination = Screen.Chart.route,
             modifier = Modifier.padding(innerPadding),
             enterTransition = {
-                androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+                if (targetState.destination.route in detailRoutes) {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    )
+                } else {
+                    fadeIn(animationSpec = tween(300))
+                }
             },
             exitTransition = {
-                androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                if (targetState.destination.route in detailRoutes) {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    )
+                } else {
+                    fadeOut(animationSpec = tween(300))
+                }
             },
             popEnterTransition = {
-                androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+                if (initialState.destination.route in detailRoutes) {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    )
+                } else {
+                    fadeIn(animationSpec = tween(300))
+                }
             },
             popExitTransition = {
-                androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                if (initialState.destination.route in detailRoutes) {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(250, easing = FastOutSlowInEasing)
+                    )
+                } else {
+                    fadeOut(animationSpec = tween(300))
+                }
             }
         ) {
             composable(Screen.Chart.route) {
-                ExpensesScreen(expensesList = expensesList, isLoading = isLoading)
+                ExpensesScreen(
+                    expensesList = expensesList,
+                    isLoading = isLoading,
+                    initialBarFractions = savedChartFractions,
+                    onInitialBarFractionsConsumed = { savedChartFractions = null },
+                    onCategoryClick = { categoryName, currentBarFractions ->
+                        savedChartFractions = currentBarFractions
+                        navController.navigate(DetailRoutes.categoryDetails(categoryName))
+                    }
+                )
             }
             composable(Screen.Categories.route) {
-                MonthlyChartScreen(expensesList = expensesList, isLoading = isLoading)
+                MonthlyChartScreen(
+                    expensesList = expensesList,
+                    isLoading = isLoading,
+                    onExpandableCategoriesClick = { selectedMonthStr ->
+                        navController.navigate(DetailRoutes.expandableCategories(selectedMonthStr))
+                    }
+                )
             }
             composable(Screen.ExpensesList.route) {
-                ExpensesListScreen(expensesList = expensesList, isLoading = isLoading)
+                ExpensesListScreen(
+                    expensesList = expensesList,
+                    isLoading = isLoading,
+                    onExpenseClick = { expenseId ->
+                        navController.navigate(DetailRoutes.expenseDetail(expenseId))
+                    }
+                )
             }
             composable(Screen.SavingsGoals.route) {
                 SavingsGoalsScreen(goalsList = goalsList, isLoading = isGoalsLoading)
+            }
+
+            // --- EKRANY SZCZEGÓŁOWE (dawne osobne Activity) ---
+
+            composable(
+                route = DetailRoutes.CATEGORY_DETAILS,
+                arguments = listOf(navArgument("categoryName") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val categoryName = backStackEntry.arguments?.getString("categoryName") ?: return@composable
+                CategoryDetailsScreen(
+                    categoryName = categoryName,
+                    expensesList = expensesList,
+                    isLoading = isLoading,
+                    onExpenseClick = { expenseId ->
+                        navController.navigate(DetailRoutes.expenseDetail(expenseId))
+                    }
+                )
+            }
+
+            composable(
+                route = DetailRoutes.EXPANDABLE_CATEGORIES,
+                arguments = listOf(
+                    navArgument("selectedMonth") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val selectedMonthStr = backStackEntry.arguments?.getString("selectedMonth")
+                ExpandableCategoriesScreen(
+                    selectedMonthStr = selectedMonthStr,
+                    expensesList = expensesList,
+                    isLoading = isLoading,
+                    onExpenseClick = { expenseId ->
+                        navController.navigate(DetailRoutes.expenseDetail(expenseId))
+                    }
+                )
+            }
+
+            composable(
+                route = DetailRoutes.EXPENSE_DETAIL,
+                arguments = listOf(navArgument("expenseId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val expenseId = backStackEntry.arguments?.getString("expenseId") ?: return@composable
+                ExpenseDetailScreen(
+                    expenseId = expenseId,
+                    expensesList = expensesList,
+                    isLoading = isLoading,
+                    onBack = { navController.popBackStack() }
+                )
             }
         }
     }

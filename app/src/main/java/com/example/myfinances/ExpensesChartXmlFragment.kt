@@ -1,7 +1,6 @@
 package com.example.myfinances
 
 import android.app.DatePickerDialog
-import android.content.Intent
 import android.os.Bundle
 import android.os.Trace
 import android.text.Editable
@@ -16,11 +15,10 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.view.ViewCompat
+import androidx.core.os.bundleOf
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsAnimationCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -35,7 +33,6 @@ import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
-import java.util.Calendar
 
 class ExpensesChartFragment : Fragment() {
 
@@ -46,9 +43,10 @@ class ExpensesChartFragment : Fragment() {
     private lateinit var vpCategoryLimits: ViewPager2
     private lateinit var limitAdapter: CategoryLimitAdapter
 
-    // Stan danych z obecnego miesiąca oraz limitów z Firebase
     private var currentMonthExpenses: List<Expense> = emptyList()
     private var categoryLimits: Map<ExpenseCategory, Float> = emptyMap()
+    private var skipNextAnimation = false
+    private var lastDisplayedTotals: Map<ExpenseCategory, Float>? = null
 
     private var limitsRef: DatabaseReference? = null
     private var limitsListener: ValueEventListener? = null
@@ -80,7 +78,6 @@ class ExpensesChartFragment : Fragment() {
         fabAddExpense = view.findViewById(R.id.fabAddExpense)
         vpCategoryLimits = view.findViewById(R.id.vpCategoryLimits)
 
-        // Konfiguracja ViewPager2 dla kart limitów
         limitAdapter = CategoryLimitAdapter(
             currentPageProvider = { vpCategoryLimits.currentItem },
             onEditClick = { category, currentLimit ->
@@ -99,10 +96,12 @@ class ExpensesChartFragment : Fragment() {
         }
 
         categoriesChartView.setOnCategoryClickListener { category ->
-            val intent = Intent(requireContext(), CategoryDetailsXmlActivity::class.java).apply {
-                putExtra("CATEGORY_NAME", category.name)
-            }
-            startActivity(intent)
+            skipNextAnimation = true
+            findNavController().navigate(
+                R.id.categoryDetailsXmlFragment,
+                bundleOf("CATEGORY_NAME" to category.name),
+                slideNavOptions
+            )
         }
 
         Trace.endSection()
@@ -141,7 +140,6 @@ class ExpensesChartFragment : Fragment() {
                     try {
                         fetchedLimits[ExpenseCategory.valueOf(catName)] = limitVal
                     } catch (_: IllegalArgumentException) {
-                        // Ignoruj nieznane klucze
                     }
                 }
                 categoryLimits = fetchedLimits
@@ -209,7 +207,6 @@ class ExpensesChartFragment : Fragment() {
         bottomSheetDialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         bottomSheetDialog.behavior.skipCollapsed = true
 
-        // 1. Zamrażamy ekran w tle (MainXmlActivity)
         val activityWindow = requireActivity().window
         val originalSoftInputMode = activityWindow.attributes.softInputMode
         activityWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
@@ -221,7 +218,6 @@ class ExpensesChartFragment : Fragment() {
             bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.container)?.fitsSystemWindows = false
             bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.coordinator)?.fitsSystemWindows = false
 
-            // 2. Po zamknięciu dialogu przywracamy adjustPan z Manifestu
             bottomSheetDialog.setOnDismissListener {
                 activity?.window?.setSoftInputMode(originalSoftInputMode)
             }
@@ -330,7 +326,29 @@ class ExpensesChartFragment : Fragment() {
         val chartData = ExpenseCategory.values().map { category ->
             Pair(category, categoryTotals[category] ?: 0f)
         }
+        val currentTotals = chartData.toMap()
 
-        categoriesChartView.setData(chartData)
+        val returningFromDetails = skipNextAnimation
+        skipNextAnimation = false
+
+        val previousTotals = lastDisplayedTotals
+        lastDisplayedTotals = currentTotals
+
+        if (returningFromDetails && previousTotals != null) {
+            if (currentTotals != previousTotals) {
+                categoriesChartView.setData(
+                    data = chartData,
+                    animate = true,
+                    initialPreviousData = previousTotals
+                )
+            } else {
+                categoriesChartView.setData(
+                    data = chartData,
+                    animate = false
+                )
+            }
+        } else {
+            categoriesChartView.setData(chartData, animate = true)
+        }
     }
 }

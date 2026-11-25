@@ -2,7 +2,6 @@ package com.example.myfinances
 
 import android.app.DatePickerDialog
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -13,7 +12,6 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
@@ -32,10 +30,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.internal.ViewUtils.hideKeyboard
 import com.google.android.material.textfield.TextInputEditText
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import androidx.core.os.bundleOf
+import androidx.navigation.fragment.findNavController
 
 class ExpensesListFragment : Fragment() {
 
@@ -155,10 +154,11 @@ class ExpensesListFragment : Fragment() {
     private fun openExpenseDetails(expense: Expense) {
         etSearch.clearFocus()
         hideKeyboard(etSearch)
-        val intent = Intent(requireContext(), ExpenseDetailXMLActivity::class.java).apply {
-            putExtra("EXTRA_ID", expense.id)
-        }
-        startActivity(intent)
+        findNavController().navigate(
+            R.id.expenseDetailXmlFragment,
+            bundleOf("EXTRA_ID" to expense.id),
+            slideNavOptions
+        )
     }
 
     private fun showFiltersBottomSheet() {
