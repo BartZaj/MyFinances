@@ -16,10 +16,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsAnimationCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -35,8 +32,9 @@ import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
-import java.util.Calendar
-
+import android.graphics.drawable.GradientDrawable
+import androidx.compose.ui.graphics.toArgb
+import androidx.viewpager2.widget.MarginPageTransformer
 class ExpensesChartFragment : Fragment() {
 
     private lateinit var progressBar: ProgressBar
@@ -63,6 +61,7 @@ class ExpensesChartFragment : Fragment() {
             }
 
             drawChart(currentMonthExpenses)
+
             updateLimitsPager()
         }
     }
@@ -93,6 +92,36 @@ class ExpensesChartFragment : Fragment() {
             isFocusableInTouchMode = false
             defaultFocusHighlightEnabled = false
         }
+
+        val density = resources.displayMetrics.density
+        vpCategoryLimits.setPageTransformer(MarginPageTransformer((12 * density).toInt()))
+
+        val llDots = view.findViewById<LinearLayout>(R.id.llLimitDots)
+        val categories = ExpenseCategory.values()
+        val dots = categories.map {
+            View(requireContext()).apply {
+                llDots.addView(this)
+            }
+        }
+
+        fun updateDots(selected: Int) {
+            dots.forEachIndexed { i, dot ->
+                val size = ((if (i == selected) 10 else 8) * density).toInt()
+                dot.layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                    marginStart = (3 * density).toInt()
+                    marginEnd = (3 * density).toInt()
+                }
+                dot.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(if (i == selected) categories[i].color.toArgb() else android.graphics.Color.LTGRAY)
+                }
+            }
+        }
+        updateDots(0)
+
+        vpCategoryLimits.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) = updateDots(position)
+        })
 
         fabAddExpense.setOnClickListener {
             showAddExpenseDialog()

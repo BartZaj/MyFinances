@@ -3,81 +3,122 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="8dp"
+    android:padding="4dp"
     android:clipToPadding="false">
 
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:cardCornerRadius="16dp"
-        app:cardElevation="4dp"
+        app:cardElevation="0dp"
         app:strokeWidth="0dp"
-        app:cardBackgroundColor="#F8F9FA">
+        app:cardBackgroundColor="#F2F4F3">
 
-        <LinearLayout
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
             android:padding="16dp">
 
-            <!-- Wykres kołowy z przerwą i procentem w środku -->
-            <FrameLayout
-                android:layout_width="100dp"
-                android:layout_height="100dp">
-
-                <com.example.myfinances.LimitCircularChartView
-                    android:id="@+id/progressLimit"
-                    android:layout_width="96dp"
-                    android:layout_height="96dp"
-                    android:layout_gravity="center" />
-
-                <TextView
-                    android:id="@+id/tvLimitPercent"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="0%"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#000000" />
-            </FrameLayout>
-
-            <!-- Informacje i przycisk Edytuj -->
             <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:layout_marginStart="16dp">
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-                <TextView
-                    android:id="@+id/tvCategoryName"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Jedzenie"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#000000" />
+                <!-- Wykres kołowy z przerwą i procentem w środku -->
+                <FrameLayout
+                    android:layout_width="100dp"
+                    android:layout_height="100dp">
 
-                <TextView
-                    android:id="@+id/tvLimitStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Wydano: 0 zł / Brak limitu"
-                    android:textSize="14sp"
-                    android:textColor="#555555"
-                    android:layout_marginTop="4dp"
-                    android:layout_marginBottom="10dp" />
+                    <com.example.myfinances.LimitCircularChartView
+                        android:id="@+id/progressLimit"
+                        android:layout_width="96dp"
+                        android:layout_height="96dp"
+                        android:layout_gravity="center" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnEditLimit"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
+                    <TextView
+                        android:id="@+id/tvLimitPercent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="0%"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="#000000" />
+                </FrameLayout>
+
+                <!-- Nazwa kategorii z ikoną + bilans -->
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Edytuj limit" />
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:layout_marginStart="16dp"
+                    android:paddingBottom="24dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <FrameLayout
+                            android:id="@+id/flCategoryIcon"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:background="@drawable/circle_shape">
+
+                            <ImageView
+                                android:id="@+id/ivCategoryIcon"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:layout_gravity="center"
+                                android:importantForAccessibility="no"
+                                app:tint="#FFFFFF" />
+                        </FrameLayout>
+
+                        <TextView
+                            android:id="@+id/tvCategoryName"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="10dp"
+                            android:text="Jedzenie"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="#000000"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvLimitStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Bilans: 0 zł / Brak limitu"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="#000000" />
+                </LinearLayout>
             </LinearLayout>
 
-        </LinearLayout>
+            <!-- Przycisk w prawym dolnym rogu, kolor ustawiany w adapterze -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnEditLimit"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_gravity="bottom|end"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="0dp"
+                android:paddingBottom="0dp"
+                android:text="Edytuj limit"
+                android:textSize="13sp"
+                android:textColor="#FFFFFF" />
+        </FrameLayout>
     </com.google.android.material.card.MaterialCardView>
 </FrameLayout>

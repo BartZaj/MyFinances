@@ -1,10 +1,14 @@
 package com.example.myfinances
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.TextView
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -14,6 +18,18 @@ data class CategoryLimitItem(
     val spent: Float,
     val limit: Float
 )
+
+@DrawableRes
+private fun limitCategoryIconRes(category: ExpenseCategory): Int =
+    when (category.name) {
+        "FOOD" -> R.drawable.baseline_directions_car_24
+        "TRANSPORT" -> R.drawable.baseline_directions_car_24
+        "ENTERTAINMENT" -> R.drawable.baseline_directions_car_24
+        "BILLS" -> R.drawable.baseline_directions_car_24
+        "CLOTHING" -> R.drawable.baseline_directions_car_24
+        "HEALTH" -> R.drawable.baseline_directions_car_24
+        else -> R.drawable.baseline_directions_car_24
+    }
 
 class CategoryLimitAdapter(
     private val currentPageProvider: () -> Int,
@@ -74,28 +90,40 @@ class CategoryLimitAdapter(
         private val tvLimitPercent: TextView = itemView.findViewById(R.id.tvLimitPercent)
         private val tvCategoryName: TextView = itemView.findViewById(R.id.tvCategoryName)
         private val tvLimitStatus: TextView = itemView.findViewById(R.id.tvLimitStatus)
+        private val flCategoryIcon: FrameLayout = itemView.findViewById(R.id.flCategoryIcon)
+        private val ivCategoryIcon: ImageView = itemView.findViewById(R.id.ivCategoryIcon)
         private val btnEditLimit: MaterialButton = itemView.findViewById(R.id.btnEditLimit)
 
         fun bind(item: CategoryLimitItem, animate: Boolean) {
+            val categoryColor = item.category.color.toArgb()
+
             tvCategoryName.text = item.category.displayName
+
+            // Kolorowe kółko z białą ikoną
+            flCategoryIcon.backgroundTintList = ColorStateList.valueOf(categoryColor)
+            ivCategoryIcon.setImageResource(limitCategoryIconRes(item.category))
+
+            // Przycisk w kolorze kategorii
+            btnEditLimit.backgroundTintList = ColorStateList.valueOf(categoryColor)
+            btnEditLimit.setTextColor(Color.WHITE)
 
             if (item.limit > 0f) {
                 val rawPercent = ((item.spent / item.limit) * 100).toInt()
                 val progressFraction = (item.spent / item.limit).coerceIn(0f, 1f)
 
                 tvLimitPercent.text = "$rawPercent%"
-                tvLimitStatus.text = "Wydano: ${item.spent.toInt()} zł / ${item.limit.toInt()} zł"
+                tvLimitStatus.text = "Bilans: ${item.spent.toInt()} zł / ${item.limit.toInt()} zł"
 
-                val indicatorColor = if (rawPercent > 100) {
+                val indicatorColor = if (item.spent > item.limit) {
                     Color.parseColor("#D32F2F")
                 } else {
-                    item.category.color.toArgb()
+                    categoryColor
                 }
                 progressLimit.setProgressData(item.category.name, progressFraction, indicatorColor, animate)
             } else {
                 tvLimitPercent.text = "—"
-                tvLimitStatus.text = "Wydano: ${item.spent.toInt()} zł / Brak limitu"
-                progressLimit.setProgressData(item.category.name, 0f, item.category.color.toArgb(), animate)
+                tvLimitStatus.text = "Bilans: ${item.spent.toInt()} zł / Brak limitu"
+                progressLimit.setProgressData(item.category.name, 0f, categoryColor, animate)
             }
 
             btnEditLimit.setOnClickListener {

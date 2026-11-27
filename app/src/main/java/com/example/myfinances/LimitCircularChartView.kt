@@ -25,7 +25,7 @@ class LimitCircularChartView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeWidth = strokeWidthPx
         strokeCap = Paint.Cap.ROUND
-        color = Color.parseColor("#E0E0E0")
+        color = Color.parseColor("#B0B0B0")
     }
 
     private val indicatorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

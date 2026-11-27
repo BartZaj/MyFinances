@@ -18,12 +18,15 @@ class CategoriesChartView @JvmOverloads constructor(
     // Dane zasilające: Kategoria -> Kwota
     private var chartData = listOf<Pair<ExpenseCategory, Float>>()
 
-    // Zapamiętywanie poprzedniego stanu do animowania
-    private var previousData = mapOf<ExpenseCategory, Float>()
-    private var previousYAxisMax = 100f // DODANO: Zapamiętywanie poprzedniej skali osi Y
+    // Wysokości słupków jako ułamek osi Y: stan początkowy i docelowy animacji
+    private var fromFractions = mapOf<ExpenseCategory, Float>()
+    private var toFractions = mapOf<ExpenseCategory, Float>()
 
     private var yAxisMax = 100f
-    private var animationProgress = 0f
+    private var animationProgress = 1f
+
+    // Animacja startuje dopiero, gdy widok faktycznie się rysuje (po powrocie z innej aktywności)
+    private var pendingAnimation = false
 
     private var onCategoryClickListener: ((ExpenseCategory) -> Unit)? = null
     private var animator: ValueAnimator? = null
@@ -58,14 +61,20 @@ class CategoriesChartView @JvmOverloads constructor(
 
     private val categoryIconsCache = mutableMapOf<ExpenseCategory, Drawable>()
 
+    // Ułamek wysokości, który użytkownik widzi w tej chwili
+    private fun displayedFraction(category: ExpenseCategory): Float {
+        val from = fromFractions[category] ?: 0f
+        val to = toFractions[category] ?: 0f
+        return from + (to - from) * animationProgress
+    }
+
     fun setData(data: List<Pair<ExpenseCategory, Float>>) {
-        // Zapisujemy stary stan, żeby wiedzieć, który słupek ma urosnąć i czy skala się zmienia
-        previousData = this.chartData.toMap()
-        previousYAxisMax = this.yAxisMax
+        // Zapamiętujemy to, co jest teraz na ekranie
+        val currentFractions = chartData.associate { it.first to displayedFraction(it.first) }
+        animator?.cancel()
 
         this.chartData = data
-        val maxTotal = chartData.maxOfOrNull { it.second } ?: 0f
-
+        val maxTotal = data.maxOfOrNull { it.second } ?: 0f
         // Dynamiczne wyliczanie siatki (kroki Y)
         yAxisMax = when {
             maxTotal >= 1000f -> ((maxTotal / 500).toInt() + 1) * 500f
@@ -73,8 +82,31 @@ class CategoriesChartView @JvmOverloads constructor(
             else -> 100f
         }
 
+        // Docelowe ułamki wysokości względem nowej skali
+        val newFractions = data.associate { (category, total) ->
+            category to if (yAxisMax > 0f) total / yAxisMax else 0f
+        }
+
+        fromFractions = currentFractions
+        toFractions = newFractions
+
         loadIcons()
-        startAnimation()
+
+        // Nic się nie zmieniło -> bez animacji
+        val changed = newFractions.any { (category, target) ->
+            (currentFractions[category] ?: 0f) != target
+        }
+        if (!changed) {
+            pendingAnimation = false
+            animationProgress = 1f
+            invalidate()
+            return
+        }
+
+        // Animacja ruszy przy pierwszym faktycznym narysowaniu widoku (patrz onDraw)
+        animationProgress = 0f
+        pendingAnimation = true
+        invalidate()
     }
 
     fun setOnCategoryClickListener(listener: (ExpenseCategory) -> Unit) {
@@ -102,6 +134,7 @@ class CategoriesChartView @JvmOverloads constructor(
     }
 
     private fun startAnimation() {
+        pendingAnimation = false
         animator?.cancel()
         animationProgress = 0f
         animator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -116,9 +149,20 @@ class CategoriesChartView @JvmOverloads constructor(
         }
     }
 
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        if (animator?.isStarted == true) {
+            animator?.cancel()
+            animationProgress = 1f
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (chartData.isEmpty()) return
+
+        // onDraw wywoła się dopiero, gdy widok jest widoczny -> dopiero wtedy startujemy animację
+        if (pendingAnimation) startAnimation()
 
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
@@ -143,14 +187,9 @@ class CategoriesChartView @JvmOverloads constructor(
         // 2. Rysowanie słupków, kwot i ikon
         chartData.forEachIndexed { index, pair ->
             val (category, total) = pair
-            val oldTotal = previousData[category] ?: 0f
 
-            // PŁYNNA INTERPOLACJA WYSOKOŚCI (efekt z Compose)
-            val oldHeightPercent = if (previousYAxisMax > 0) oldTotal / previousYAxisMax else 0f
-            val newHeightPercent = if (yAxisMax > 0) total / yAxisMax else 0f
-
-            // Animacja przechodzi płynnie ze starego ułamka wysokości na nowy ułamek wysokości
-            val currentHeightPercent = oldHeightPercent + (newHeightPercent - oldHeightPercent) * animationProgress
+            // Animują się tylko słupki, których ułamek wysokości się zmienił (from != to)
+            val currentHeightPercent = displayedFraction(category)
 
             val xCenter = yAxisSpace + (index * columnWidth) + (columnWidth / 2)
 
@@ -195,7 +234,7 @@ class CategoriesChartView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN) {
+        if (event.action == MotionEvent.ACTION_DOWN && chartData.isNotEmpty()) {
             val chartWidth = width - yAxisSpace
             val columnWidth = chartWidth / chartData.size
 

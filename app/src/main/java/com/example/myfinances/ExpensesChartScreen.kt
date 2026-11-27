@@ -2,33 +2,53 @@ package com.example.myfinances
 
 import android.content.Intent
 import android.os.Trace
-import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -37,22 +57,6 @@ import com.google.firebase.database.ValueEventListener
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import android.widget.Toast
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,6 +107,7 @@ fun ExpensesScreen(
     }
 
     Scaffold(
+        containerColor = Color.White,
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showAddDialog = true },
@@ -255,9 +260,10 @@ fun ExpensesScreen(
 
                     HorizontalPager(
                         state = pagerState,
+                        pageSpacing = 12.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
+                            .height(190.dp)
                     ) { page ->
                         val category = categories[page]
                         CategoryLimitCard(
@@ -266,6 +272,24 @@ fun ExpensesScreen(
                             limit = categoryLimits[category] ?: 0f,
                             onEditClick = { editingCategory = category }
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Kropki paginacji
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        categories.forEachIndexed { index, cat ->
+                            val selected = pagerState.currentPage == index
+                            Box(
+                                modifier = Modifier
+                                    .size(if (selected) 10.dp else 8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (selected) cat.color else Color.LightGray)
+                            )
+                        }
                     }
                 }
             }
@@ -293,7 +317,7 @@ fun ExpensesScreen(
         )
     }
 
-    // Wyświetlanie BottomSheet – tutaj przełączasz między Wersją 1 a Wersją 2
+    // Wyświetlanie BottomSheet z edycją limitu (arkusz idzie w górę razem z klawiaturą)
     editingCategory?.let { category ->
         val currentLimit = categoryLimits[category] ?: 0f
         val saveLimit: (Float) -> Unit = { newLimit ->
@@ -308,8 +332,6 @@ fun ExpensesScreen(
             }
             editingCategory = null
         }
-
-        // WERSJA 2: Arkusz idzie w górę razem z klawiaturą (odkomentuj i zakomentuj Wersję 1, żeby przetestować)
 
         EditLimitBottomSheetWithKeyboard(
             category = category,
@@ -552,18 +574,8 @@ fun BarChartItem(
                 .fillMaxWidth(),
             contentAlignment = Alignment.TopCenter
         ) {
-            val categoryIcon = when (category.name) {
-                "FOOD" -> Icons.Default.ShoppingCart
-                "TRANSPORT" -> Icons.Default.DirectionsCar
-                "ENTERTAINMENT" -> Icons.Default.MusicNote
-                "BILLS" -> Icons.Default.ReceiptLong
-                "CLOTHING" -> Icons.Default.Checkroom
-                "HEALTH" -> Icons.Default.MedicalServices
-                else -> Icons.Default.List
-            }
-
             Icon(
-                imageVector = categoryIcon,
+                imageVector = limitCategoryIcon(category),
                 contentDescription = category.displayName,
                 tint = category.color, // Ikona w kolorze kategorii
                 modifier = Modifier
@@ -573,6 +585,20 @@ fun BarChartItem(
         }
     }
 }
+
+// Ikony kategorii (te same, co w pozostałych ekranach)
+private fun limitCategoryIcon(category: ExpenseCategory): ImageVector =
+    when (category.name) {
+        "FOOD" -> Icons.Default.ShoppingCart
+        "TRANSPORT" -> Icons.Default.DirectionsCar
+        "ENTERTAINMENT" -> Icons.Default.MusicNote
+        "BILLS" -> Icons.Default.ReceiptLong
+        "CLOTHING" -> Icons.Default.Checkroom
+        "HEALTH" -> Icons.Default.MedicalServices
+        else -> Icons.Default.List
+    }
+
+// Karta limitu: jasne tło, wykres kołowy z procentem, przycisk edycji w prawym dolnym rogu
 @Composable
 fun CategoryLimitCard(
     category: ExpenseCategory,
@@ -581,6 +607,7 @@ fun CategoryLimitCard(
     onEditClick: () -> Unit
 ) {
     val hasLimit = limit > 0f
+    val isExceeded = hasLimit && spent > limit
     val rawPercent = if (hasLimit) ((spent / limit) * 100).toInt() else 0
     val targetProgress = if (hasLimit) (spent / limit).coerceIn(0f, 1f) else 0f
 
@@ -590,71 +617,108 @@ fun CategoryLimitCard(
         label = "LimitProgressAnimation"
     )
 
-    val indicatorColor = if (hasLimit && rawPercent > 100) {
-        Color(0xFFD32F2F)
-    } else {
-        category.color
-    }
+    val errorColor = Color(0xFFD32F2F)
+    val indicatorColor = if (isExceeded) errorColor else category.color
+    // Kolor tła karty – podmień na kolor karty „ukończone” z celów oszczędnościowych
+    val cardColor = Color(0xFFF2F4F3)
 
     Card(
         modifier = Modifier
             .fillMaxSize()
             .padding(4.dp),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Box(
-                modifier = Modifier.size(100.dp),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                CircularProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.size(96.dp),
-                    color = indicatorColor,
-                    strokeWidth = 10.dp,
-                    trackColor = Color(0xFFE0E0E0),
-                    strokeCap = StrokeCap.Round
-                )
-                Text(
-                    text = if (hasLimit) "$rawPercent%" else "—",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
+                Box(
+                    modifier = Modifier.size(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier.size(96.dp),
+                        color = indicatorColor,
+                        strokeWidth = 10.dp,
+                        trackColor = Color(0xFFB0B0B0),
+                        strokeCap = StrokeCap.Round
+                    )
+                    Text(
+                        text = if (hasLimit) "$rawPercent%" else "—",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // Kolorowe kółko z białą ikoną + nazwa kategorii
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(category.color),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = limitCategoryIcon(category),
+                                contentDescription = category.displayName,
+                                modifier = Modifier.size(18.dp),
+                                tint = Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = category.displayName,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Text(
+                        text = if (hasLimit) {
+                            "Bilans: ${spent.toInt()} zł / ${limit.toInt()} zł"
+                        } else {
+                            "Bilans: ${spent.toInt()} zł / Brak limitu"
+                        },
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+
+                }
             }
 
-            Column(
+            FilledTonalButton(
+                onClick = onEditClick,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = category.color,
+                    contentColor = Color.White
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 16.dp),
-                verticalArrangement = Arrangement.Center
+                    .align(Alignment.BottomEnd)
+                    .height(36.dp)
             ) {
-                Text(
-                    text = category.displayName,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-                Text(
-                    text = if (hasLimit) {
-                        "Wydano: ${spent.toInt()} zł / ${limit.toInt()} zł"
-                    } else {
-                        "Wydano: ${spent.toInt()} zł / Brak limitu"
-                    },
-                    fontSize = 14.sp,
-                    color = Color(0xFF555555),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
-                )
-                FilledTonalButton(onClick = onEditClick) {
-                    Text("Edytuj limit")
-                }
+                Text("Edytuj limit", fontSize = 13.sp)
             }
         }
     }
