@@ -23,6 +23,8 @@ enum class ExpenseCategory(val displayName: String, val color: Color) {
     TRANSPORT("Transport", Color(0xFF2196F3)),
     ENTERTAINMENT("Rozrywka", Color(0xFFFF9800)),
     BILLS("Rachunki", Color(0xFFF44336)),
+    CLOTHING("Odzież", Color(0xFF9C27B0)), // <--- NOWA KATEGORIA (Fioletowy)
+    HEALTH("Zdrowie", Color(0xFF009688)),  // <--- NOWA KATEGORIA (Morski/Teal)
     OTHER("Inne", Color(0xFF9E9E9E))
 }
 

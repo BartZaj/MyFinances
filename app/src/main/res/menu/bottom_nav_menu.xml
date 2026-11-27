@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_chart"
+        android:icon="@android:drawable/ic_menu_sort_by_size"
+        android:title="Kategorie" />
+    <item
+        android:id="@+id/nav_categories_launcher"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="6 Miesięcy" />
+    <!-- NOWA ZAKŁADKA -->
+    <item
+        android:id="@+id/nav_expenses_list"
+        android:icon="@android:drawable/ic_menu_recent_history"
+        android:title="Lista" />
+
+    <item
+        android:id="@+id/nav_savings_goals"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="Cele" />
+</menu>

@@ -7,17 +7,28 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -31,23 +42,22 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import java.time.LocalDate
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.filled.DirectionsCar // Auto
-import androidx.compose.material.icons.filled.List          // Inne
-import androidx.compose.material.icons.filled.MusicNote     // Nutka
-import androidx.compose.material.icons.filled.ReceiptLong   // Rachunek/Lista
-import androidx.compose.material.icons.filled.ShoppingCart  // Jedzenie
+import java.time.YearMonth
 
 class ExpandableCategoriesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Odbieramy wybrany miesiąc z Intencji (jeśli został przekazany)
+        val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
+
         setContent {
             MyFinancesTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color.White
                 ) {
-                    ExpandableCategoriesScreen()
+                    ExpandableCategoriesScreen(selectedMonthStr = selectedMonthStr)
                 }
             }
         }
@@ -55,9 +65,15 @@ class ExpandableCategoriesActivity : ComponentActivity() {
 }
 
 @Composable
-fun ExpandableCategoriesScreen() {
-    var groupedExpenses by remember { mutableStateOf<Map<ExpenseCategory, List<Expense>>>(emptyMap()) }
+fun ExpandableCategoriesScreen(selectedMonthStr: String?) {
+    var groupedExpenses by remember {mutableStateOf<Map<ExpenseCategory, List<Expense>>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
+    var expandedCategoryNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
+
+    // Konwersja odebranego Stringa (np. "2026-11") na obiekt YearMonth
+    val targetMonth = remember(selectedMonthStr) {
+        selectedMonthStr?.let { YearMonth.parse(it) }
+    }
 
     DisposableEffect(Unit) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
@@ -71,13 +87,17 @@ fun ExpandableCategoriesScreen() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
-                    val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
+                    val id = child.key ?: ""
                     val name = child.child("name").getValue(String::class.java) ?: ""
                     val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                     val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
                     val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
-                    fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                    val expenseDate = LocalDate.parse(dateStr)
+                    // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
+                    if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
+                        fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
+                    }
                 }
 
                 groupedExpenses = fetchedExpenses.groupBy { it.category }
@@ -97,12 +117,10 @@ fun ExpandableCategoriesScreen() {
             CircularProgressIndicator()
         }
     } else {
-        // DODANO: Wymuszenie stałej kolejności kategorii
         val sortedCategories = remember(groupedExpenses) {
-            val order = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
+            val order = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "CLOTHING", "HEALTH", "OTHER")
             groupedExpenses.keys.sortedBy { category ->
                 val index = order.indexOf(category.name)
-                // Jeśli kategoria nie jest na liście order, ląduje na samym końcu
                 if (index == -1) Int.MAX_VALUE else index
             }
         }
@@ -112,21 +130,41 @@ fun ExpandableCategoriesScreen() {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Optymalizacja: Dodany parametr key zapobiegający zbędnym rekompozycjom całej listy
             items(
                 items = sortedCategories,
                 key = { category -> category.name }
             ) { category ->
-                val expenses = groupedExpenses[category] ?: emptyList()
-                ExpandableCategoryCard(category, expenses)
+                // Sortowanie wydatków po dacie malejąco (od najnowszego do najstarszego)
+                val expenses = groupedExpenses[category]?.sortedWith(
+                    compareByDescending<Expense> { it.date }
+                        .thenByDescending { it.id }
+                ) ?: emptyList()
+                val isExpanded = expandedCategoryNames.contains(category.name)
+
+                ExpandableCategoryCard(
+                    category = category,
+                    expenses = expenses,
+                    isExpanded = isExpanded,
+                    onExpandChange = { expanded ->
+                        expandedCategoryNames = if (expanded) {
+                            expandedCategoryNames + category.name
+                        } else {
+                            expandedCategoryNames - category.name
+                        }
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+fun ExpandableCategoryCard(
+    category: ExpenseCategory,
+    expenses: List<Expense>,
+    isExpanded: Boolean,
+    onExpandChange: (Boolean) -> Unit
+) {
     val context = LocalContext.current
 
     val totalSum = remember(expenses) {
@@ -135,89 +173,132 @@ fun ExpandableCategoryCard(category: ExpenseCategory, expenses: List<Expense>) {
 
     val interactionSource = remember { MutableInteractionSource() }
 
-    Card(
+    val baseColor = Color(category.color.toArgb())
+    val backgroundColor = baseColor.copy(alpha = 0.18f)
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(backgroundColor)
+            .animateContentSize()
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) { expanded = !expanded }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // MAPOWANIE: Wybór ikony na podstawie nazwy kategorii
-                    val categoryIcon = when(category.name) {
-                        "FOOD" -> Icons.Default.ShoppingCart
-                        "TRANSPORT" -> Icons.Default.DirectionsCar // Zmienione na Place, bo masz już ten import na górze pliku i nie wyrzuci błędu
-                        "ENTERTAINMENT" -> Icons.Default.MusicNote
-                        "BILLS" -> Icons.Default.ReceiptLong
-                        else -> Icons.Default.List // Domyślna ikona
-                    }
+        // Nagłówek
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) {
+                    onExpandChange(!isExpanded)
+                }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val categoryIcon = when (category.name) {
+                    "FOOD" -> Icons.Default.ShoppingCart
+                    "TRANSPORT" -> Icons.Default.DirectionsCar
+                    "ENTERTAINMENT" -> Icons.Default.MusicNote
+                    "CLOTHING" -> Icons.Default.Checkroom // <--- NOWA
+                    "HEALTH" -> Icons.Default.MedicalServices
+                    "BILLS" -> Icons.Default.ReceiptLong
+                    else -> Icons.Default.List
+                }
 
-                    // ZMIANA: Icon zamiast Box z tłem
+                // Kolorowe kółko z białą ikoną
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(baseColor),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = categoryIcon,
                         contentDescription = category.displayName,
-                        modifier = Modifier.size(28.dp),
-                        tint = Color(category.color.toArgb()) // Ikona przyjmuje kolor kategorii
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(text = category.displayName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // DODANO FORMATOWANIE:
-                    Text(
-                        text = String.format("%.2f zł", totalSum),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Rozwiń/Zwiń"
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.White
                     )
                 }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = category.displayName,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = baseColor
+                )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = String.format("%.2f zł", totalSum),
+                    fontWeight = FontWeight.Bold,
+                    color = baseColor
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Rozwiń/Zwiń",
+                    tint = baseColor
+                )
+            }
+        }
 
-            if (expanded) {
-                Divider()
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    expenses.forEach { expense ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    // DODANO PRZEJŚCIE DO SZCZEGÓŁÓW Z DANYMI (tutaj ładujemy ExpenseDetailXMLActivity)
-                                    val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
-                                        putExtra("EXTRA_ID", expense.id)
-                                        putExtra("EXTRA_NAME", expense.name)
-                                        putExtra("EXTRA_AMOUNT", expense.amount)
-                                        putExtra("EXTRA_DATE", expense.date.toString())
-                                        putExtra("EXTRA_CATEGORY", expense.category.name)
-                                    }
-                                    context.startActivity(intent)
+        if (isExpanded) {
+            Divider(color = baseColor.copy(alpha = 0.4f))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                expenses.forEach { expense ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = Intent(context, ExpenseDetailActivity::class.java).apply {
+                                    putExtra("EXTRA_ID", expense.id)
                                 }
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = expense.name, color = Color.DarkGray)
-                            // DODANO FORMATOWANIE:
-                            Text(text = String.format("- %.2f zł", expense.amount), color = Color.Gray)
+                                context.startActivity(intent)
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Kolorowa kropka przy nazwie wydatku
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(baseColor)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // ZMIANA TUTAJ: Kolumna dla nazwy i daty (odpowiednik XML textCol z LinearLayout vertical)
+                            Column {
+                                Text(
+                                    text = expense.name,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    text = expense.date.toString(),
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
+                        Text(
+                            text = String.format("- %.2f zł", expense.amount),
+                            color = baseColor,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp
+                        )
                     }
                 }
             }

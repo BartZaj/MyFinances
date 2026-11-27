@@ -1,5 +1,6 @@
 package com.example.myfinances
 
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -25,11 +26,14 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import java.time.LocalDate
+import java.time.YearMonth
 
 class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
+
+    private var targetMonth: YearMonth? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +42,9 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         progressBar = findViewById(R.id.progressBar)
         recyclerView.layoutManager = LinearLayoutManager(this)
+
+        val selectedMonthStr = intent.getStringExtra("SELECTED_MONTH")
+        targetMonth = selectedMonthStr?.let { YearMonth.parse(it) }
 
         loadData()
     }
@@ -54,14 +61,18 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val fetchedExpenses = mutableListOf<Expense>()
                 for (child in snapshot.children) {
-// Wewnątrz pętli for (child in snapshot.children) { ... }
-                    val id = child.key ?: "" // Pobranie unikalnego klucza z Firebase
+                    val id = child.key ?: ""
                     val name = child.child("name").getValue(String::class.java) ?: ""
                     val amount = child.child("amount").getValue(Double::class.java)?.toFloat() ?: 0f
                     val dateStr = child.child("date").getValue(String::class.java) ?: LocalDate.now().toString()
                     val catStr = child.child("category").getValue(String::class.java) ?: ExpenseCategory.OTHER.name
 
-                    fetchedExpenses.add(Expense(id, name, amount, LocalDate.parse(dateStr), ExpenseCategory.valueOf(catStr)))
+                    val expenseDate = LocalDate.parse(dateStr)
+
+                    // 3. Filtrowanie danych z uwzględnieniem wybranego miesiąca
+                    if (targetMonth == null || YearMonth.from(expenseDate) == targetMonth) {
+                        fetchedExpenses.add(Expense(id, name, amount, expenseDate, ExpenseCategory.valueOf(catStr)))
+                    }
                 }
 
                 val grouped = fetchedExpenses.groupBy { it.category }
@@ -69,13 +80,11 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 recyclerView.visibility = View.VISIBLE
                 val currentAdapter = recyclerView.adapter as? CategoryExpandableAdapter
-                        if (currentAdapter == null) {
-                            // Pierwsze załadowanie - tworzymy adapter
-                            recyclerView.adapter = CategoryExpandableAdapter(grouped)
-                        } else {
-                            // Aktualizacja danych (np. po powrocie z edycji) - stan się zachowa
-                            currentAdapter.updateData(grouped)
-                        }
+                if (currentAdapter == null) {
+                    recyclerView.adapter = CategoryExpandableAdapter(grouped)
+                } else {
+                    currentAdapter.updateData(grouped)
+                }
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -88,37 +97,29 @@ class ExpandableCategoriesXmlActivity : AppCompatActivity() {
 class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory, List<Expense>>) :
     RecyclerView.Adapter<CategoryExpandableAdapter.ViewHolder>() {
 
-    // DODANO: Sztywny szyk kategorii ustalony w liście
-    private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "OTHER")
+    private val categoryOrder = listOf("FOOD", "TRANSPORT", "ENTERTAINMENT", "BILLS", "CLOTHING", "HEALTH", "OTHER")
 
-    // DODANO: Funkcja pomocnicza sortująca zbiór kluczy
     private fun sortCategories(keys: Set<ExpenseCategory>): List<ExpenseCategory> {
         return keys.sortedBy { category ->
             val index = categoryOrder.indexOf(category.name)
-            // Jeśli kategorii nie ma na liście, ląduje na samym końcu
             if (index == -1) Int.MAX_VALUE else index
         }
     }
 
-    // ZMIANA: Użycie funkcji sortującej przy inicjalizacji
     private var categories = sortCategories(groupedExpenses.keys)
     private val expandedCategories = mutableSetOf<ExpenseCategory>()
 
     fun updateData(newGroupedExpenses: Map<ExpenseCategory, List<Expense>>) {
         this.groupedExpenses = newGroupedExpenses
-
-        // ZMIANA: Użycie funkcji sortującej przy aktualizacji danych
         this.categories = sortCategories(newGroupedExpenses.keys)
-
-        // Zabezpieczenie: usunięcie ze stanu rozwinięcia kategorii,
-        // które zostały całkowicie usunięte z bazy
         expandedCategories.retainAll(categories.toSet())
-
         notifyDataSetChanged()
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val cardLayout: LinearLayout = view.findViewById(R.id.cardLayout)
         val headerLayout: RelativeLayout = view.findViewById(R.id.headerLayout)
+        val iconCircleBackground: View = view.findViewById(R.id.iconCircleBackground)
         val iconIndicator: ImageView = view.findViewById(R.id.iconIndicator)
         val tvCategoryName: TextView = view.findViewById(R.id.tvCategoryName)
         val tvCategoryTotal: TextView = view.findViewById(R.id.tvCategoryTotal)
@@ -140,32 +141,52 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
-        val expenses = groupedExpenses[category] ?: emptyList()
+        val expenses = groupedExpenses[category]?.sortedWith(
+            compareByDescending<Expense> { it.date }
+                .thenByDescending { it.id }
+        ) ?: emptyList()
         val total = expenses.sumOf { it.amount.toDouble() }.toFloat()
 
         holder.tvCategoryName.text = category.displayName
-        holder.tvCategoryTotal.text = "${total.toInt()} zł"
+        holder.tvCategoryTotal.text = String.format("%.2f zł", total)
 
-        // --- 1. STYL KARTY Z JETPACK COMPOSE (Material 3) ---
         val baseColor = category.color.toArgb()
-        val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, 38)
+        val composeLikeBackgroundColor = ColorUtils.setAlphaComponent(baseColor, (255 * 0.18).toInt())
 
+        // Główny kontener – zaokrąglone tło z przezroczystością (0.18 alpha)
         val cardShape = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = 48f
+            cornerRadius = 64f // Mocne zaokrąglenie, by imitowało 24.dp
             setColor(composeLikeBackgroundColor)
         }
+        holder.cardLayout.background = cardShape
 
-        holder.itemView.background = cardShape
-        holder.itemView.setPadding(30, 30, 30, 30)
+        // Kółko z ikoną (pełen kolor)
+        val circleShape = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(baseColor)
+        }
+        holder.iconCircleBackground.background = circleShape
 
-        val iconRes = when(category.name) {
+        // Teksty i strzałka również w pełnym kolorze
+        holder.tvCategoryName.setTextColor(baseColor)
+        holder.tvCategoryTotal.setTextColor(baseColor)
+        holder.ivArrow.setColorFilter(baseColor)
+
+        // Linia separatora o nieco ciemniejszej alfie koloru bazowego
+
+        val iconRes = when (category.name) {
             "FOOD" -> R.drawable.baseline_directions_car_24
             "TRANSPORT" -> R.drawable.baseline_directions_car_24
             "ENTERTAINMENT" -> R.drawable.baseline_directions_car_24
+            "CLOTHING" -> R.drawable.baseline_directions_car_24
+            "HEALTH" -> R.drawable.baseline_directions_car_24
+            "BILLS" -> R.drawable.baseline_directions_car_24
             else -> R.drawable.baseline_directions_car_24
         }
         holder.iconIndicator.setImageResource(iconRes)
+        // Ikona jest biała (w kółku)
+        holder.iconIndicator.setColorFilter(Color.WHITE)
 
         holder.expandableContent.removeAllViews()
 
@@ -173,11 +194,12 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             val row = LinearLayout(holder.itemView.context).apply {
                 id = View.generateViewId()
                 orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    setMargins(0, 15, 0, 15)
+                    setMargins(0, 20, 0, 20)
                 }
 
                 val outValue = TypedValue()
@@ -187,28 +209,60 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
                 isFocusable = true
             }
 
-            val tvName = TextView(holder.itemView.context).apply {
-                text = expense.name
-                setTextColor(android.graphics.Color.DKGRAY)
+            // Zawijacz na kolorową kropeczkę obok nazwy wydatku
+            val leftLayout = LinearLayout(holder.itemView.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
 
-            val tvAmount = TextView(holder.itemView.context).apply {
-                text = "- ${expense.amount.toInt()} zł"
-                setTextColor(Color.GRAY)
+            val expenseDot = View(holder.itemView.context).apply {
+                layoutParams = LinearLayout.LayoutParams(24, 24).apply {
+                    setMargins(0, 0, 32, 0) // Odstęp w prawo
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(baseColor)
+                }
             }
 
-            row.addView(tvName)
+            // Kolumna dla nazwy i daty
+            val textCol = LinearLayout(holder.itemView.context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+
+            val tvName = TextView(holder.itemView.context).apply {
+                text = expense.name
+                setTextColor(Color.DKGRAY)
+                textSize = 16f
+            }
+
+            val tvDate = TextView(holder.itemView.context).apply {
+                text = expense.date.toString()
+                setTextColor(Color.GRAY)
+                textSize = 12f
+            }
+
+            textCol.addView(tvName)
+            textCol.addView(tvDate)
+
+            leftLayout.addView(expenseDot)
+            leftLayout.addView(textCol)
+
+            val tvAmount = TextView(holder.itemView.context).apply {
+                text = String.format("- %.2f zł", expense.amount)
+                setTextColor(baseColor)
+                textSize = 16f
+            }
+
+            row.addView(leftLayout)
             row.addView(tvAmount)
 
             row.setOnClickListener {
                 val context = holder.itemView.context
                 val intent = Intent(context, ExpenseDetailXMLActivity::class.java).apply {
                     putExtra("EXTRA_ID", expense.id)
-                    putExtra("EXTRA_NAME", expense.name)
-                    putExtra("EXTRA_AMOUNT", expense.amount)
-                    putExtra("EXTRA_DATE", expense.date.toString())
-                    putExtra("EXTRA_CATEGORY", expense.category.name)
                 }
                 context.startActivity(intent)
             }
@@ -216,7 +270,6 @@ class CategoryExpandableAdapter(private var groupedExpenses: Map<ExpenseCategory
             holder.expandableContent.addView(row)
         }
 
-        // --- 2. NAPRAWIONA ANIMACJA ROZWIJANIA Z FADE-IN / FADE-OUT ---
         val isExpanded = expandedCategories.contains(category)
 
         holder.expandableContent.visibility = if (isExpanded) View.VISIBLE else View.GONE
